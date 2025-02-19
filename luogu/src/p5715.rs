@@ -1,4 +1,4 @@
-use crate::input;
+use ojan_luogu::*;
 
 pub fn main() {
     let mut iner = input::new();

@@ -1,4 +1,4 @@
-use crate::input;
+use ojan_luogu::*;
 
 fn power(n: u16, m: usize) -> u128 {
     (n as u128) << m
