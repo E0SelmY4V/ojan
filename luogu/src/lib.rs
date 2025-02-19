@@ -1,3 +1,13 @@
+//! # OJan 库
+//!
+//! 这个库是 E0SelmY4V 自己用来在各大在线题库上写
+//! 不带其他任何 crates 的比赛代码用的。
+//!
+//! 因为这个库在不断更新，
+//! 考虑到正在看这堆文字的你可能也对这个库感兴趣，
+//! [这里是这个库的网址](https://github.com/E0SelmY4V/ojan)
+//!
+
 pub mod input {
     use std::{
         fmt::Debug,
