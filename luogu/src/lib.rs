@@ -53,7 +53,7 @@ pub trait SignificantlyFormatable {
     fn format_significantly(&self, figures: usize) -> String;
 }
 macro_rules! impl_format_significantly {
-    ($type:ty) => {
+    ($type: ty) => {
         impl SignificantlyFormatable for $type {
             fn format_significantly(&self, figures: usize) -> String {
                 let digits = match self.abs() {
@@ -68,6 +68,48 @@ macro_rules! impl_format_significantly {
 }
 impl_format_significantly!(f32);
 impl_format_significantly!(f64);
+
+pub trait Gcdable {
+    fn gcd(&self, other: Self) -> Self;
+    fn lcm(&self, other: Self) -> Self;
+}
+macro_rules! impl_gcd {
+    ($type: ty) => {
+        impl Gcdable for $type {
+            fn gcd(&self, mut b: Self) -> Self {
+                assert!(*self != 0 && b != 0);
+                let mut a = *self;
+                impl_gcd!(a, b)
+            }
+            fn lcm(&self, mut b: Self) -> Self {
+                if *self == 0 || b == 0 {
+                    0
+                } else {
+                    let mut a = *self;
+                    (a * b) / impl_gcd!(a, b)
+                }
+            }
+        }
+    };
+    ($a: ident, $b: ident) => {{
+        while $b != 0 {
+            let temp = $b;
+            $b = $a % $b;
+            $a = temp;
+        }
+        $a
+    }};
+}
+impl_gcd!(u8);
+impl_gcd!(u16);
+impl_gcd!(u32);
+impl_gcd!(u64);
+impl_gcd!(u128);
+impl_gcd!(i8);
+impl_gcd!(i16);
+impl_gcd!(i32);
+impl_gcd!(i64);
+impl_gcd!(i128);
 
 #[cfg(test)]
 mod tests {
@@ -91,5 +133,17 @@ mod tests {
         assert_eq!("-0.1235", (-0.123456_f64).format_significantly(4));
         assert_eq!("-0.1234", (-0.123446_f64).format_significantly(4));
         assert_eq!("-0.00034500", (-0.000345_f64).format_significantly(5));
+    }
+    #[test]
+    fn gcd() {
+        assert_eq!(1, 3.gcd(2));
+        assert_eq!(4, 16.gcd(12));
+        assert_eq!(11, 77.gcd(66));
+        assert_eq!(80, 800.gcd(880));
+        assert_eq!(1, 163.gcd(79));
+
+        assert_eq!(6, 2.lcm(3));
+        assert_eq!(12, 4.lcm(6));
+        assert_eq!(30, 10.lcm(15));
     }
 }
