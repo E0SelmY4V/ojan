@@ -61,16 +61,16 @@ pub mod util {
 
 use util::*;
 
+pub fn bmi_tip(m: f64, h: f64) -> String {
+    match m / (h * h){
+        v if v < 18.5 => String::from("Underweight"),
+        v if v < 24.0 => String::from("Normal"),
+        v => format_significantly_f64(v, 6) + "\nOverweight",
+    }
+}
+
 pub fn main() {
     let mut iner = input::new();
     let mut line_iner = iner.line();
-    let m: f64 = line_iner.parse();
-    let h: f64 = line_iner.parse();
-    let bmi = m / (h * h);
-    let tip = match bmi {
-        v if v < 18.5 => String::from("Underweight"),
-        v if v >= 1.85 && v < 24.0 => String::from("Normal"),
-        v => format_significantly_f64(v, 6) + "\nOverweight",
-    };
-    print!("{tip}");
+    print!("{}", bmi_tip(line_iner.parse(), line_iner.parse()));
 }
