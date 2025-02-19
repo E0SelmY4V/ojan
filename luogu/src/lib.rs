@@ -31,11 +31,12 @@ pub mod input {
                 .read_line(&mut self.input)
                 .expect("Can't read input!");
             let splited = self.input.split_whitespace();
-            LineIner { splited }
+            LineIner { splited, line: &self.input }
         }
     }
     pub struct LineIner<'a> {
-        pub splited: SplitWhitespace<'a>,
+        splited: SplitWhitespace<'a>,
+        pub line: &'a str,
     }
     impl<'a> LineIner<'a> {
         pub fn parse<T>(&mut self) -> T
