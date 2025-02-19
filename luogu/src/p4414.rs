@@ -1,10 +1,10 @@
 use ojan_luogu::*;
 
 pub fn main() {
-	let mut iner = input::new();
-	let mut nums: Vec<u8> = iner.line().parse_to_iter().collect();
+	let mut demander = input::demand();
+	let mut nums: Vec<u8> = demander.get_many(3).collect();
 	nums.sort();
-	for alpha in iner.line().line.chars().take(3) {
+	for alpha in demander.read_line().chars().take(3) {
 		print!("{} ", nums[alpha as usize - 'A' as usize]);
 	}
 }

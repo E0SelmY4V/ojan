@@ -10,14 +10,17 @@
 
 pub mod input {
     use std::{
+        collections::VecDeque,
         fmt::Debug,
         io::{self, Stdin},
+        iter,
         str::{FromStr, SplitWhitespace},
     };
     pub struct Iner {
         input: String,
         stdin: Stdin,
     }
+    #[deprecated]
     pub fn new() -> Iner {
         Iner {
             input: String::new(),
@@ -31,7 +34,10 @@ pub mod input {
                 .read_line(&mut self.input)
                 .expect("Can't read input!");
             let splited = self.input.split_whitespace();
-            LineIner { splited, line: &self.input }
+            LineIner {
+                splited,
+                line: &self.input,
+            }
         }
     }
     pub struct LineIner<'a> {
@@ -56,6 +62,54 @@ pub mod input {
             <T as FromStr>::Err: Debug,
         {
             self.splited.map(|s| s.parse().expect("can't parse!"))
+        }
+    }
+    pub struct Demander {
+        stdin: Stdin,
+        cached: VecDeque<String>,
+    }
+    pub fn demand() -> Demander {
+        Demander {
+            stdin: io::stdin(),
+            cached: VecDeque::new(),
+        }
+    }
+    impl Demander {
+        pub fn get<T>(&mut self) -> T
+        where
+            T: FromStr,
+            <T as FromStr>::Err: Debug,
+        {
+            if let Some(data) = self.cached.pop_front() {
+                data.parse().expect(&format!("can't parse {data}"))
+            } else {
+                self.cached = self
+                    .read_line()
+                    .split_whitespace()
+                    .map(|s| String::from(s))
+                    .collect();
+                self.get()
+            }
+        }
+        pub fn get_many<'a, T>(&'a mut self, num: usize) -> impl Iterator<Item = T> + 'a
+        where
+            T: FromStr,
+            <T as FromStr>::Err: Debug,
+        {
+            let mut counter = 0;
+            iter::from_fn(move || {
+                if counter < num {
+                    counter += 1;
+                    Some(self.get::<T>())
+                } else {
+                    None
+                }
+            })
+        }
+        pub fn read_line(&self) -> String {
+            let mut input_str = String::new();
+            self.stdin.read_line(&mut input_str).expect("Can't read");
+            input_str
         }
     }
 }

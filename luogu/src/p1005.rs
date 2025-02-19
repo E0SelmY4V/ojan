@@ -5,15 +5,14 @@ fn power(n: u16, m: usize) -> u128 {
 }
 
 pub fn main() {
-    let mut iner = input::new();
-    let mut line_iner = iner.line();
-    let n: usize = line_iner.parse();
-    let m: usize = line_iner.parse();
+    let mut demander = input::demand();
+    let n: usize = demander.get();
+    let m: usize = demander.get();
     let sum: u128 = (0..n)
         .map(|_| {
             let line: Vec<u16> = vec![0]
                 .into_iter()
-                .chain(iner.line().parse_to_iter())
+                .chain(demander.get_many(m))
                 .chain(vec![0].into_iter())
                 .collect();
             let mut dp = [[0; 90]; 90];
