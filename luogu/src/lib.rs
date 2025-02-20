@@ -17,64 +17,18 @@ pub mod input {
         str::{FromStr, SplitWhitespace},
     };
     pub struct Iner {
-        input: String,
         stdin: Stdin,
+        cached: VecDeque<String>,
+        line_last: String,
     }
-    #[deprecated]
     pub fn new() -> Iner {
         Iner {
-            input: String::new(),
             stdin: io::stdin(),
+            cached: VecDeque::new(),
+            line_last: String::new(),
         }
     }
     impl Iner {
-        pub fn line(&mut self) -> LineIner {
-            self.input.clear();
-            self.stdin
-                .read_line(&mut self.input)
-                .expect("Can't read input!");
-            let splited = self.input.split_whitespace();
-            LineIner {
-                splited,
-                line: &self.input,
-            }
-        }
-    }
-    pub struct LineIner<'a> {
-        splited: SplitWhitespace<'a>,
-        pub line: &'a str,
-    }
-    impl<'a> LineIner<'a> {
-        pub fn parse<T>(&mut self) -> T
-        where
-            T: FromStr,
-            <T as FromStr>::Err: Debug,
-        {
-            self.splited
-                .next()
-                .expect("No more input!")
-                .parse()
-                .expect("can't parse!")
-        }
-        pub fn parse_to_iter<T>(self) -> impl Iterator<Item = T> + 'a
-        where
-            T: FromStr,
-            <T as FromStr>::Err: Debug,
-        {
-            self.splited.map(|s| s.parse().expect("can't parse!"))
-        }
-    }
-    pub struct Demander {
-        stdin: Stdin,
-        cached: VecDeque<String>,
-    }
-    pub fn demand() -> Demander {
-        Demander {
-            stdin: io::stdin(),
-            cached: VecDeque::new(),
-        }
-    }
-    impl Demander {
         pub fn get<T>(&mut self) -> T
         where
             T: FromStr,
@@ -110,6 +64,46 @@ pub mod input {
             let mut input_str = String::new();
             self.stdin.read_line(&mut input_str).expect("Can't read");
             input_str
+        }
+        pub fn line(&mut self) -> LineIner {
+            self.line_last = self.read_line();
+            let splited = self.line_last.split_whitespace();
+            LineIner {
+                splited,
+                line: &self.line_last,
+            }
+        }
+        pub fn line_iter<T>(&mut self) -> impl Iterator<Item = T> + '_
+        where
+            T: FromStr,
+            <T as FromStr>::Err: Debug,
+        {
+            self.line().parse_to_iter()
+        }
+    }
+    pub struct LineIner<'a> {
+        splited: SplitWhitespace<'a>,
+        pub line: &'a str,
+    }
+    impl<'a> LineIner<'a> {
+        #[deprecated(note = "use `iner.get()` instead")]
+        pub fn parse<T>(&mut self) -> T
+        where
+            T: FromStr,
+            <T as FromStr>::Err: Debug,
+        {
+            self.splited
+                .next()
+                .expect("No more input!")
+                .parse()
+                .expect("can't parse!")
+        }
+        pub fn parse_to_iter<T>(self) -> impl Iterator<Item = T> + 'a
+        where
+            T: FromStr,
+            <T as FromStr>::Err: Debug,
+        {
+            self.splited.map(|s| s.parse().expect("can't parse!"))
         }
     }
 }
