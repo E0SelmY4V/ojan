@@ -8,6 +8,13 @@
 //! [这里是这个库的网址](https://github.com/E0SelmY4V/ojan)
 //!
 
+use std::{
+    iter::repeat,
+    ops::{Add, Mul, Sub},
+    rc::Rc,
+    result,
+};
+
 pub mod input {
     use std::{
         collections::VecDeque,
@@ -170,39 +177,199 @@ impl_gcd!(i32);
 impl_gcd!(i64);
 impl_gcd!(i128);
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn format_significantly() {
-        assert_eq!("1.000", 1_f64.format_significantly(4));
-        assert_eq!("12.2300", 12.23_f64.format_significantly(6));
-        assert_eq!("123.000", 123_f64.format_significantly(6));
-        assert_eq!("12345", 12345_f64.format_significantly(4));
-        assert_eq!("0.1235", 0.123456_f64.format_significantly(4));
-        assert_eq!("0.1234", 0.123446_f64.format_significantly(4));
-        assert_eq!("0.00034500", 0.000345_f64.format_significantly(5));
-
-        assert_eq!("0.000", 0_f64.format_significantly(4));
-
-        assert_eq!("-1.000", (-1_f64).format_significantly(4));
-        assert_eq!("-12.2300", (-12.23_f64).format_significantly(6));
-        assert_eq!("-123.000", (-123_f64).format_significantly(6));
-        assert_eq!("-12345", (-12345_f64).format_significantly(4));
-        assert_eq!("-0.1235", (-0.123456_f64).format_significantly(4));
-        assert_eq!("-0.1234", (-0.123446_f64).format_significantly(4));
-        assert_eq!("-0.00034500", (-0.000345_f64).format_significantly(5));
+#[derive(Debug)]
+pub struct BigNatural(Rc<Vec<u8>>);
+impl BigNatural {
+    pub fn new() -> Self {
+        Self(Rc::new(Vec::new()))
     }
-    #[test]
-    fn gcd() {
-        assert_eq!(1, 3.gcd(2));
-        assert_eq!(4, 16.gcd(12));
-        assert_eq!(11, 77.gcd(66));
-        assert_eq!(80, 800.gcd(880));
-        assert_eq!(1, 163.gcd(79));
-
-        assert_eq!(6, 2.lcm(3));
-        assert_eq!(12, 4.lcm(6));
-        assert_eq!(30, 10.lcm(15));
+    fn add_impl(a: &Vec<u8>, mut b: Vec<u8>, pre: bool) -> (Vec<u8>, bool) {
+        assert!(a.len() <= b.len());
+        let mut next = pre;
+        for index in 0..a.len() {
+            let (ab, n1) = a[index].overflowing_add(b[index]);
+            let (end, n2) = ab.overflowing_add(next as u8);
+            b[index] = end;
+            next = n1 || n2;
+        }
+        let mut end;
+        for index in a.len()..b.len() {
+            if next {
+                (end, next) = b[index].overflowing_add(1);
+                b[index] = end;
+            }
+        }
+        (b, next)
+    }
+    fn add_algo_compare(a: Vec<u8>, b: Vec<u8>) -> Vec<u8> {
+        if a.len() > b.len() {
+            Self::add_algo(&b, a)
+        } else {
+            Self::add_algo(&a, b)
+        }
+    }
+    fn add_algo(a: &Vec<u8>, b: Vec<u8>) -> Vec<u8> {
+        let (mut result, next) = Self::add_impl(a, b, false);
+        if next {
+            result.push(1);
+        }
+        result
+    }
+    fn binary_add(level: u8, iter: &mut impl Iterator<Item = Vec<u8>>) -> Option<Vec<u8>> {
+        if level == 0 {
+            iter.next()
+        } else {
+            if let Some(mut a) = Self::binary_add(level - 1, iter) {
+                if let Some(b_ori) = Self::binary_add(level - 1, iter) {
+                    let mut b: Vec<u8> = vec![0; 1 << (level - 1)];
+                    b.extend(b_ori.into_iter());
+                    Some(Self::add_algo_compare(a, b))
+                } else {
+                    a.insert(0, 0);
+                    Some(a)
+                }
+            } else {
+                None
+            }
+        }
     }
 }
+macro_rules! impl_big_natural_from {
+    ($type:ty, long) => {
+        impl From<$type> for BigNatural {
+            fn from(mut num: $type) -> Self {
+                let mut num_vec = vec![];
+                while num != 0 {
+                    num_vec.push(num as u8);
+                    num = num >> 8_usize;
+                }
+                Self(Rc::new(num_vec))
+            }
+        }
+        impl From<Vec<$type>> for BigNatural {
+            fn from(vec: Vec<$type>) -> Self {
+                let result = vec
+                    .into_iter()
+                    .map(BigNatural::from)
+                    .map(|n| n.0.to_vec())
+                    .rev()
+                    .collect::<Vec<Vec<u8>>>()
+                    .concat();
+                Self(Rc::new(result))
+            }
+        }
+    };
+    ($type:ty, short) => {
+        impl From<$type> for BigNatural {
+            fn from(num: $type) -> Self {
+                Self(Rc::new(vec![num as u8]))
+            }
+        }
+        impl From<Vec<$type>> for BigNatural {
+            fn from(vec: Vec<$type>) -> Self {
+                Self(Rc::new(vec.into_iter().map(|n| n as u8).rev().collect()))
+            }
+        }
+    };
+}
+impl_big_natural_from!(u8, short);
+impl_big_natural_from!(u16, long);
+impl_big_natural_from!(u32, long);
+impl_big_natural_from!(u64, long);
+impl_big_natural_from!(u128, long);
+impl_big_natural_from!(i8, short);
+impl_big_natural_from!(i16, long);
+impl_big_natural_from!(i32, long);
+impl_big_natural_from!(i64, long);
+impl_big_natural_from!(i128, long);
+impl From<BigNatural> for Vec<u8> {
+    fn from(big_natural: BigNatural) -> Self {
+        let mut inner = big_natural.0.to_vec();
+        inner.reverse();
+        inner
+    }
+}
+impl Clone for BigNatural {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
+}
+impl Add for BigNatural {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(Rc::new(if self.0.len() < rhs.0.len() {
+            Self::add_algo(&self.0, rhs.0.to_vec())
+        } else {
+            Self::add_algo(&rhs.0, self.0.to_vec())
+        }))
+    }
+}
+impl Sub for BigNatural {
+    type Output = Self;
+    fn sub(self, b: Self) -> Self::Output {
+        assert!(self.0.len() >= b.0.len());
+        let rhs: Vec<u8> =
+            b.0.iter()
+                .map(|&n| !n)
+                .chain(repeat(0xff).take(self.0.len() - b.0.len()))
+                .collect();
+        let (mut result, _) = Self::add_impl(&self.0, rhs, true);
+        while Some(&0) == result.last() {
+            result.pop();
+        }
+        Self(Rc::new(result))
+    }
+}
+impl Eq for BigNatural {}
+impl PartialEq for BigNatural {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+        for index in 0..self.0.len() {
+            if self.0[index] != other.0[index] {
+                return false;
+            }
+        }
+        true
+    }
+}
+impl Mul for BigNatural {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        if self.0.len() == 0 {
+            return self;
+        }
+        let mut results = rhs.0.iter().map(|&b| {
+            let mut pre = 0;
+            let mut line: Vec<u8> = self
+                .0
+                .iter()
+                .chain(repeat(&0).take(1))
+                .map(|&a| {
+                    let r = (a as u16) * (b as u16);
+                    let n = r + pre as u16;
+                    pre = (n >> 8) as u8;
+                    n as u8
+                })
+                .collect();
+            if line.last() == Some(&0) {
+                line.pop();
+            }
+            line
+        });
+        let result = results
+            .rev()
+            .reduce(|mut result, line| {
+                result.insert(0, 0);
+                Self::add_algo(&line, result)
+            })
+            .unwrap_or(vec![]);
+        // let result = Self::binary_add((results.len() as f64).log2().ceil() as u8, &mut results)
+        //     .unwrap_or(Vec::new());
+        Self(Rc::new(result))
+    }
+}
+
+#[cfg(test)]
+mod lib_tests;
