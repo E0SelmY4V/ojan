@@ -61,6 +61,10 @@ fn big_natural() {
     assert!(BigNatural::from(0x100001) != BigNatural::from(0x101101));
     assert!(BigNatural::from(0x103400) != BigNatural::from(0x100034));
     assert!(BigNatural::from(0x63f8a9) == BigNatural::from(0x63f8a9));
+    assert!(BigNatural::from(0) == BigNatural::from(0));
+    assert!(BigNatural::from(0xff00) > BigNatural::from(0xff));
+    assert!(BigNatural::from(0x1234) < BigNatural::from(0x2234));
+    assert!(BigNatural::from(0x1234) < BigNatural::from(0x1235));
 
     assert_eq!("0", format!("{}", BigNatural::from(0)));
     assert_eq!("1", format!("{}", BigNatural::from(1)));
@@ -140,7 +144,10 @@ fn big_natural() {
 
     macro_rules! tinput {
         ($l:literal) => {
-            assert_eq!(stringify!($l).parse::<BigNatural>().unwrap(), BigNatural::from($l));
+            assert_eq!(
+                stringify!($l).parse::<BigNatural>().unwrap(),
+                BigNatural::from($l)
+            );
         };
     }
 

@@ -9,8 +9,9 @@
 //!
 
 use std::{
+    cmp::Ordering,
     fmt::Display,
-    iter::repeat,
+    iter::{repeat, repeat_n},
     num::ParseIntError,
     ops::{Add, Mul, Sub},
     rc::Rc,
@@ -187,20 +188,22 @@ impl BigNatural {
     }
     fn add_impl(a: &Vec<u8>, mut b: Vec<u8>, pre: bool) -> (Vec<u8>, bool) {
         assert!(a.len() <= b.len());
-        let mut next = pre;
-        for index in 0..a.len() {
-            let (ab, n1) = a[index].overflowing_add(b[index]);
-            let (end, n2) = ab.overflowing_add(next as u8);
-            b[index] = end;
-            next = n1 || n2;
-        }
-        let mut end;
-        for index in a.len()..b.len() {
+        let mut next = a
+            .iter()
+            .zip(b.iter_mut())
+            .fold(pre, |mut next, (&a_d, b_p)| {
+                if next {
+                    (*b_p, next) = (*b_p).overflowing_add(1);
+                }
+                let n1;
+                (*b_p, n1) = (*b_p).overflowing_add(a_d);
+                next || n1
+            });
+        for b_p in b.iter_mut().skip(a.len()) {
             if !next {
                 break;
             }
-            (end, next) = b[index].overflowing_add(1);
-            b[index] = end;
+            (*b_p, next) = (*b_p).overflowing_add(1);
         }
         (b, next)
     }
@@ -215,15 +218,11 @@ impl BigNatural {
         if level == 0 {
             results.next()
         } else {
-            if let Some(a) = Self::binary_mul_add(level - 1, results) {
-                Some(if let Some(b) = Self::binary_mul_add(level - 1, results) {
-                    Self::shl_add(level - 1, &a, b)
-                } else {
-                    a
-                })
-            } else {
-                None
-            }
+            Self::binary_mul_add(level - 1, results).and_then(|a| {
+                Self::binary_mul_add(level - 1, results)
+                    .and_then(|b| Some(Self::shl_add(level - 1, &a, b)))
+                    .or(Some(a))
+            })
         }
     }
     fn shl_add(pos: u8, a: &Vec<u8>, b: Vec<u8>) -> Vec<u8> {
@@ -243,14 +242,19 @@ impl BigNatural {
     }
 }
 macro_rules! impl_big_natural_from {
-    ($type:ty, long) => {
+    (_impl, $num:ident: $type:ty) => {{
+            let mut num_vec = Vec::with_capacity(size_of::<$type>());
+            while $num != 0 {
+                num_vec.push($num as u8);
+                $num = $num >> 8;
+            }
+            num_vec
+    }};
+    (long, $type:ty) => {
         impl From<$type> for BigNatural {
             fn from(mut num: $type) -> Self {
-                let mut num_vec = vec![];
-                while num != 0 {
-                    num_vec.push(num as u8);
-                    num = num >> 8_usize;
-                }
+                let mut num_vec = impl_big_natural_from!(_impl, num: $type);
+                Self::clear_zero(&mut num_vec);
                 Self(Rc::new(num_vec))
             }
         }
@@ -258,8 +262,7 @@ macro_rules! impl_big_natural_from {
             fn from(vec: Vec<$type>) -> Self {
                 let mut result = vec
                     .into_iter()
-                    .map(BigNatural::from)
-                    .map(|n| n.0.to_vec())
+                    .map(|mut num| impl_big_natural_from!(_impl, num: $type))
                     .rev()
                     .collect::<Vec<Vec<u8>>>()
                     .concat();
@@ -268,7 +271,7 @@ macro_rules! impl_big_natural_from {
             }
         }
     };
-    ($type:ty, short) => {
+    (short, $type:ty) => {
         impl From<$type> for BigNatural {
             fn from(num: $type) -> Self {
                 Self(Rc::new(vec![num as u8]))
@@ -283,23 +286,16 @@ macro_rules! impl_big_natural_from {
         }
     };
 }
-impl_big_natural_from!(u8, short);
-impl_big_natural_from!(u16, long);
-impl_big_natural_from!(u32, long);
-impl_big_natural_from!(u64, long);
-impl_big_natural_from!(u128, long);
-impl_big_natural_from!(i8, short);
-impl_big_natural_from!(i16, long);
-impl_big_natural_from!(i32, long);
-impl_big_natural_from!(i64, long);
-impl_big_natural_from!(i128, long);
-impl From<BigNatural> for Vec<u8> {
-    fn from(big_natural: BigNatural) -> Self {
-        let mut inner = big_natural.0.to_vec();
-        inner.reverse();
-        inner
-    }
-}
+impl_big_natural_from!(short, u8);
+impl_big_natural_from!(long, u16);
+impl_big_natural_from!(long, u32);
+impl_big_natural_from!(long, u64);
+impl_big_natural_from!(long, u128);
+impl_big_natural_from!(short, i8);
+impl_big_natural_from!(long, i16);
+impl_big_natural_from!(long, i32);
+impl_big_natural_from!(long, i64);
+impl_big_natural_from!(long, i128);
 impl Clone for BigNatural {
     fn clone(&self) -> Self {
         Self(Rc::clone(&self.0))
@@ -322,7 +318,8 @@ impl Sub for BigNatural {
         let rhs: Vec<u8> =
             b.0.iter()
                 .map(|&n| !n)
-                .chain(repeat(0xff).take(self.0.len() - b.0.len()))
+                .chain(repeat(0xff))
+                .take(self.0.len())
                 .collect();
         let (mut result, _) = Self::add_impl(&self.0, rhs, true);
         Self::clear_zero(&mut result);
@@ -332,15 +329,20 @@ impl Sub for BigNatural {
 impl Eq for BigNatural {}
 impl PartialEq for BigNatural {
     fn eq(&self, other: &Self) -> bool {
-        if self.0.len() != other.0.len() {
-            return false;
+        self.cmp(other).is_eq()
+    }
+}
+impl PartialOrd for BigNatural {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for BigNatural {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.0.len().cmp(&other.0.len()) {
+            Ordering::Equal => self.0.iter().rev().cmp(other.0.iter().rev()),
+            n => n,
         }
-        for index in 0..self.0.len() {
-            if self.0[index] != other.0[index] {
-                return false;
-            }
-        }
-        true
     }
 }
 impl Mul for BigNatural {
@@ -349,22 +351,23 @@ impl Mul for BigNatural {
         if self.0.len() == 0 {
             return self;
         }
-        let mut results = rhs.0.iter().map(|&b| {
-            let mut pre = 0;
-            let mut line: Vec<u8> = self
-                .0
-                .iter()
-                .chain(repeat(&0).take(1))
-                .map(|&a| {
-                    let r = (a as u16) * (b as u16);
-                    let n = r + pre as u16;
-                    pre = (n >> 8) as u8;
-                    n as u8
-                })
-                .collect();
-            Self::pop_zero(&mut line);
-            line
-        });
+        let mut results = repeat(())
+            .map(|_| vec![0; self.0.len() + 1])
+            .zip(rhs.0.iter())
+            .map(|(mut line, &b)| {
+                self.0
+                    .iter()
+                    .chain(repeat_n(&0, 1))
+                    .zip(line.iter_mut())
+                    .fold(0, |pre, (&a, line_p)| {
+                        let r = (a as u16) * (b as u16);
+                        let n = r + pre as u16;
+                        *line_p = n as u8;
+                        (n >> 8) as u8
+                    });
+                Self::pop_zero(&mut line);
+                line
+            });
         let mut level = 0;
         let mut result = results.next().unwrap_or(vec![]);
         while let Some(r) = Self::binary_mul_add(level, &mut results) {
@@ -378,10 +381,10 @@ impl BigNatural {
     pub fn div_short(&self, diver: u8) -> (Self, u8) {
         assert!(diver != 0);
         let diver = diver as u16;
-        let mut result = vec![];
-        let dived = self.0.iter().rev().fold(0, |pre, &now| {
+        let mut result = vec![0; self.0.len()];
+        let dived = self.0.iter().rev().zip(result.iter_mut()).fold(0, |pre, (&now, r_p)| {
             let n = ((pre as u16) << 8) + now as u16;
-            result.push((n / diver) as u8);
+            *r_p = (n / diver) as u8;
             (n % diver) as u8
         });
         result.reverse();
@@ -448,16 +451,13 @@ impl FromStr for BigNatural {
             {
                 input.push(num?);
             }
-            Ok(BigNatural::from(input))
+            Ok(input.into())
         } else {
             let mut result = BigNatural::new();
             let mut power = BigNatural::from(1_u8);
             let ten = BigNatural::from(10_u8);
             let codes: Vec<BigNatural> = (0..=9_u8).map(BigNatural::from).collect();
-            for c in s.chars().rev() {
-                if c == '_' {
-                    continue;
-                }
+            for c in s.chars().rev().filter(|&n| n != '_') {
                 if ('0'..='9').contains(&c) {
                     result = result + codes[c as usize - '0' as usize].clone() * power.clone();
                     power = power * ten.clone();
@@ -465,7 +465,7 @@ impl FromStr for BigNatural {
                     return Err(BigNaturalParseErr::WrongChar);
                 }
             }
-            Ok(BigNatural::from(result))
+            Ok(result.into())
         }
     }
 }
