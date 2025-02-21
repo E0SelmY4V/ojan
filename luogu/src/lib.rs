@@ -13,7 +13,6 @@ use std::{
     iter::repeat,
     ops::{Add, Mul, Sub},
     rc::Rc,
-    result,
 };
 
 pub mod input {
@@ -195,19 +194,13 @@ impl BigNatural {
         }
         let mut end;
         for index in a.len()..b.len() {
-            if next {
-                (end, next) = b[index].overflowing_add(1);
-                b[index] = end;
+            if !next {
+                break;
             }
+            (end, next) = b[index].overflowing_add(1);
+            b[index] = end;
         }
         (b, next)
-    }
-    fn add_algo_compare(a: Vec<u8>, b: Vec<u8>) -> Vec<u8> {
-        if a.len() > b.len() {
-            Self::add_algo(&b, a)
-        } else {
-            Self::add_algo(&a, b)
-        }
     }
     fn add_algo(a: &Vec<u8>, b: Vec<u8>) -> Vec<u8> {
         let (mut result, next) = Self::add_impl(a, b, false);
@@ -216,23 +209,25 @@ impl BigNatural {
         }
         result
     }
-    fn binary_add(level: u8, iter: &mut impl Iterator<Item = Vec<u8>>) -> Option<Vec<u8>> {
+    fn binary_mul_add(level: u8, results: &mut impl Iterator<Item = Vec<u8>>) -> Option<Vec<u8>> {
         if level == 0 {
-            iter.next()
+            results.next()
         } else {
-            if let Some(mut a) = Self::binary_add(level - 1, iter) {
-                if let Some(b_ori) = Self::binary_add(level - 1, iter) {
-                    let mut b: Vec<u8> = vec![0; 1 << (level - 1)];
-                    b.extend(b_ori.into_iter());
-                    Some(Self::add_algo_compare(a, b))
+            if let Some(a) = Self::binary_mul_add(level - 1, results) {
+                Some(if let Some(b) = Self::binary_mul_add(level - 1, results) {
+                    Self::shl_add(level - 1, &a, b)
                 } else {
-                    a.insert(0, 0);
-                    Some(a)
-                }
+                    a
+                })
             } else {
                 None
             }
         }
+    }
+    fn shl_add(pos: u8, a: &Vec<u8>, b: Vec<u8>) -> Vec<u8> {
+        let mut b_filled: Vec<u8> = vec![0; 1 << pos];
+        b_filled.extend(b.into_iter());
+        Self::add_algo(a, b_filled)
     }
 }
 macro_rules! impl_big_natural_from {
@@ -359,15 +354,12 @@ impl Mul for BigNatural {
             }
             line
         });
-        let result = results
-            .rev()
-            .reduce(|mut result, line| {
-                result.insert(0, 0);
-                Self::add_algo(&line, result)
-            })
-            .unwrap_or(vec![]);
-        // let result = Self::binary_add((results.len() as f64).log2().ceil() as u8, &mut results)
-        //     .unwrap_or(Vec::new());
+        let mut level = 0;
+        let mut result = results.next().unwrap_or(vec![]);
+        while let Some(r) = Self::binary_mul_add(level, &mut results) {
+            result = Self::shl_add(level, &result, r);
+            level += 1;
+        }
         Self(Rc::new(result))
     }
 }
@@ -401,7 +393,7 @@ impl Display for BigNatural {
         if dis_list.is_empty() {
             dis_list.push('0');
         }
-        write!(f, "{}", String::from_iter(dis_list.into_iter()))?;
+        write!(f, "{}", String::from_iter(dis_list.into_iter().rev()))?;
         Ok(())
     }
 }
