@@ -65,9 +65,15 @@ fn big_natural() {
     assert_eq!("0", format!("{}", BigNatural::from(0)));
     assert_eq!("1", format!("{}", BigNatural::from(1)));
     assert_eq!("12345678", format!("{}", BigNatural::from(12345678)));
-    assert_eq!("8902367478", format!("{}", BigNatural::from(8902367478_u128)));
+    assert_eq!(
+        "8902367478",
+        format!("{}", BigNatural::from(8902367478_u128))
+    );
     assert_eq!("998244353", format!("{}", BigNatural::from(998244353_u128)));
-    assert_eq!("981678389900", format!("{}", BigNatural::from(981678389900_u128)));
+    assert_eq!(
+        "981678389900",
+        format!("{}", BigNatural::from(981678389900_u128))
+    );
 
     macro_rules! tcalc {
         ($u1:literal /_short $u2:literal) => {
@@ -131,4 +137,32 @@ fn big_natural() {
     tcalc!(0 /_short 146);
     tcalc!(1 /_short 146);
     tcalc!(1986 /_short 1);
+
+    macro_rules! tinput {
+        ($l:literal) => {
+            assert_eq!(stringify!($l).parse::<BigNatural>().unwrap(), BigNatural::from($l));
+        };
+    }
+
+    tinput!(0);
+    tinput!(1);
+    tinput!(192_736_1);
+    tinput!(817__2_32);
+    tinput!(18267391___);
+    tinput!(0x0);
+    tinput!(0x0_000);
+    tinput!(0x000);
+    tinput!(0xff8163);
+    tinput!(0x198_2__f_ff);
+    // todo
+    // tinput!(0o0);
+    // tinput!(0o0000__);
+    // tinput!(0o_0_00);
+    // tinput!(0o23153);
+    // tinput!(0o2_5_752631);
+    tinput!(0b0);
+    tinput!(0b0000);
+    tinput!(0b000);
+    tinput!(0b0010__1_001_0101011101);
+    tinput!(0b1_1001);
 }

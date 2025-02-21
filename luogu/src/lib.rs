@@ -11,8 +11,10 @@
 use std::{
     fmt::Display,
     iter::repeat,
+    num::ParseIntError,
     ops::{Add, Mul, Sub},
     rc::Rc,
+    str::FromStr,
 };
 
 pub mod input {
@@ -229,6 +231,16 @@ impl BigNatural {
         b_filled.extend(b.into_iter());
         Self::add_algo(a, b_filled)
     }
+    fn clear_zero(vec: &mut Vec<u8>) {
+        while Some(&0) == vec.last() {
+            vec.pop();
+        }
+    }
+    fn pop_zero(vec: &mut Vec<u8>) {
+        if vec.last() == Some(&0) {
+            vec.pop();
+        }
+    }
 }
 macro_rules! impl_big_natural_from {
     ($type:ty, long) => {
@@ -244,13 +256,14 @@ macro_rules! impl_big_natural_from {
         }
         impl From<Vec<$type>> for BigNatural {
             fn from(vec: Vec<$type>) -> Self {
-                let result = vec
+                let mut result = vec
                     .into_iter()
                     .map(BigNatural::from)
                     .map(|n| n.0.to_vec())
                     .rev()
                     .collect::<Vec<Vec<u8>>>()
                     .concat();
+                Self::clear_zero(&mut result);
                 Self(Rc::new(result))
             }
         }
@@ -263,7 +276,9 @@ macro_rules! impl_big_natural_from {
         }
         impl From<Vec<$type>> for BigNatural {
             fn from(vec: Vec<$type>) -> Self {
-                Self(Rc::new(vec.into_iter().map(|n| n as u8).rev().collect()))
+                let mut result = vec.into_iter().map(|n| n as u8).rev().collect();
+                Self::clear_zero(&mut result);
+                Self(Rc::new(result))
             }
         }
     };
@@ -310,9 +325,7 @@ impl Sub for BigNatural {
                 .chain(repeat(0xff).take(self.0.len() - b.0.len()))
                 .collect();
         let (mut result, _) = Self::add_impl(&self.0, rhs, true);
-        while Some(&0) == result.last() {
-            result.pop();
-        }
+        Self::clear_zero(&mut result);
         Self(Rc::new(result))
     }
 }
@@ -349,9 +362,7 @@ impl Mul for BigNatural {
                     n as u8
                 })
                 .collect();
-            if line.last() == Some(&0) {
-                line.pop();
-            }
+            Self::pop_zero(&mut line);
             line
         });
         let mut level = 0;
@@ -365,6 +376,7 @@ impl Mul for BigNatural {
 }
 impl BigNatural {
     pub fn div_short(&self, diver: u8) -> (Self, u8) {
+        assert!(diver != 0);
         let diver = diver as u16;
         let mut result = vec![];
         let dived = self.0.iter().rev().fold(0, |pre, &now| {
@@ -373,11 +385,7 @@ impl BigNatural {
             (n % diver) as u8
         });
         result.reverse();
-        if let Some(n) = result.pop() {
-            if n != 0 {
-                result.push(n);
-            }
-        }
+        Self::pop_zero(&mut result);
         (Self(Rc::new(result)), dived)
     }
 }
@@ -395,6 +403,70 @@ impl Display for BigNatural {
         }
         write!(f, "{}", String::from_iter(dis_list.into_iter().rev()))?;
         Ok(())
+    }
+}
+#[derive(Debug)]
+pub enum BigNaturalParseErr {
+    NoInput,
+    FormatWrong,
+    ParseInt,
+    WrongChar,
+}
+impl From<ParseIntError> for BigNaturalParseErr {
+    fn from(_: ParseIntError) -> Self {
+        BigNaturalParseErr::ParseInt
+    }
+}
+impl FromStr for BigNatural {
+    type Err = BigNaturalParseErr;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() == 0 {
+            return Err(BigNaturalParseErr::NoInput);
+        }
+        if s.chars().nth(0).unwrap() == '0' {
+            if s.len() == 1 {
+                return Ok(BigNatural::new());
+            }
+            if s.len() < 3 {
+                return Err(BigNaturalParseErr::FormatWrong);
+            }
+            let (radix, chunk_size, cap) = match s.chars().nth(1).unwrap() {
+                'x' | 'X' => (16, 2, (s.len() - 2) / 2),
+                // 'o' | 'O' => (8, s.len() - 2),
+                'b' | 'B' => (2, 8, s.len() - 2),
+                _ => return Err(BigNaturalParseErr::FormatWrong),
+            };
+            let mut input = Vec::with_capacity(cap);
+            for num in s[2..]
+                .chars()
+                .filter(|&n| n != '_')
+                .collect::<Vec<char>>()
+                .rchunks(chunk_size)
+                .map(|chunk| String::from_iter(chunk))
+                .map(|s| u8::from_str_radix(&s, radix))
+                .rev()
+            {
+                input.push(num?);
+            }
+            Ok(BigNatural::from(input))
+        } else {
+            let mut result = BigNatural::new();
+            let mut power = BigNatural::from(1_u8);
+            let ten = BigNatural::from(10_u8);
+            let codes: Vec<BigNatural> = (0..=9_u8).map(BigNatural::from).collect();
+            for c in s.chars().rev() {
+                if c == '_' {
+                    continue;
+                }
+                if ('0'..='9').contains(&c) {
+                    result = result + codes[c as usize - '0' as usize].clone() * power.clone();
+                    power = power * ten.clone();
+                } else {
+                    return Err(BigNaturalParseErr::WrongChar);
+                }
+            }
+            Ok(BigNatural::from(result))
+        }
     }
 }
 
