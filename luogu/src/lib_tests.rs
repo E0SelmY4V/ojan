@@ -62,7 +62,21 @@ fn big_natural() {
     assert!(BigNatural::from(0x103400) != BigNatural::from(0x100034));
     assert!(BigNatural::from(0x63f8a9) == BigNatural::from(0x63f8a9));
 
+    assert_eq!("0", format!("{}", BigNatural::from(0)));
+    assert_eq!("1", format!("{}", BigNatural::from(1)));
+    assert_eq!("12345678", format!("{}", BigNatural::from(12345678)));
+    assert_eq!("8902367478", format!("{}", BigNatural::from(8902367478_u128)));
+    assert_eq!("998244353", format!("{}", BigNatural::from(998244353_u128)));
+    assert_eq!("981678389900", format!("{}", BigNatural::from(981678389900_u128)));
+
     macro_rules! tcalc {
+        ($u1:literal /_short $u2:literal) => {
+            let t = BigNatural::from($u1 as u128);
+            let (result, dived) = t.div_short($u2);
+            assert_eq!(result, BigNatural::from($u1 as u128 / $u2 as u128));
+            assert_eq!(dived, ($u1 as u128 % $u2) as u8);
+            assert_eq!(t, BigNatural::from($u1 as u128));
+        };
         ($u1:literal + $u2:literal) => {
             tcalc!($u1, $u2, add);
         };
@@ -110,4 +124,11 @@ fn big_natural() {
     tcalc!(921823 * 18239912);
     tcalc!(18239912 * 921823);
     tcalc!(92738287 * 1923);
+
+    tcalc!(13 /_short 4);
+    tcalc!(1238732 /_short 76);
+    tcalc!(98126382340 /_short 23);
+    tcalc!(0 /_short 146);
+    tcalc!(1 /_short 146);
+    tcalc!(1986 /_short 1);
 }

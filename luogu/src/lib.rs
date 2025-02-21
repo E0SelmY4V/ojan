@@ -9,6 +9,7 @@
 //!
 
 use std::{
+    fmt::Display,
     iter::repeat,
     ops::{Add, Mul, Sub},
     rc::Rc,
@@ -368,6 +369,40 @@ impl Mul for BigNatural {
         // let result = Self::binary_add((results.len() as f64).log2().ceil() as u8, &mut results)
         //     .unwrap_or(Vec::new());
         Self(Rc::new(result))
+    }
+}
+impl BigNatural {
+    pub fn div_short(&self, diver: u8) -> (Self, u8) {
+        let diver = diver as u16;
+        let mut result = vec![];
+        let dived = self.0.iter().rev().fold(0, |pre, &now| {
+            let n = ((pre as u16) << 8) + now as u16;
+            result.push((n / diver) as u8);
+            (n % diver) as u8
+        });
+        result.reverse();
+        if let Some(n) = result.pop() {
+            if n != 0 {
+                result.push(n);
+            }
+        }
+        (Self(Rc::new(result)), dived)
+    }
+}
+impl Display for BigNatural {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut me = self.clone();
+        let mut dived;
+        let mut dis_list = vec![];
+        while me.0.len() != 0 {
+            (me, dived) = me.div_short(10);
+            dis_list.push((dived + '0' as u8) as char);
+        }
+        if dis_list.is_empty() {
+            dis_list.push('0');
+        }
+        write!(f, "{}", String::from_iter(dis_list.into_iter()))?;
+        Ok(())
     }
 }
 
