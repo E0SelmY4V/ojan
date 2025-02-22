@@ -362,8 +362,8 @@ impl Add for BigNatural {
             } else {
                 Self::add_algo(&b, a.to_vec())
             })),
-            (Self::Zero, n) => n,
             (n, Self::Zero) => n,
+            (Self::Zero, n) => n,
         }
     }
 }
@@ -528,6 +528,105 @@ impl FromStr for BigNatural {
                 }
             }
             Ok(result.into())
+        }
+    }
+}
+
+pub enum BigInteger {
+    NonZero { sign: bool, value: Rc<Vec<u8>> },
+    Zero,
+}
+impl BigInteger {
+    pub fn new() -> Self {
+        BigInteger::Zero
+    }
+}
+macro_rules! impl_big_integer_from {
+    (u, $type:ty) => {
+        impl_big_integer_from!(bind, $type, |_| false);
+    };
+    (i, $type:ty) => {
+        impl_big_integer_from!(bind, $type, |&value| value < 0);
+    };
+    (bind, $type:ty, $sign:expr) => {
+        impl_big_integer_from!($type, $sign);
+        impl_big_integer_from!(Vec<$type>, |_| false);
+    };
+    ($type:ty, $sign:expr) => {
+        impl From<$type> for BigInteger {
+            fn from(inp: $type) -> Self {
+                let sign = $sign(&inp);
+                let big_natural = BigNatural::from(inp);
+                match big_natural {
+                    BigNatural::NonZero(value) => Self::NonZero { sign, value },
+                    BigNatural::Zero => Self::Zero,
+                }
+            }
+        }
+    };
+}
+impl_big_integer_from!(u, u8);
+impl_big_integer_from!(u, u16);
+impl_big_integer_from!(u, u32);
+impl_big_integer_from!(u, u64);
+impl_big_integer_from!(u, u128);
+impl_big_integer_from!(i, i8);
+impl_big_integer_from!(i, i16);
+impl_big_integer_from!(i, i32);
+impl_big_integer_from!(i, i64);
+impl_big_integer_from!(i, i128);
+impl Clone for BigInteger {
+    fn clone(&self) -> Self {
+        match self {
+            Self::NonZero { sign, value } => Self::NonZero {
+                sign: *sign,
+                value: value.clone(),
+            },
+            Self::Zero => Self::Zero,
+        }
+    }
+}
+impl Add for BigInteger {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (
+                Self::NonZero {
+                    sign: sign_a,
+                    value: value_a,
+                },
+                Self::NonZero {
+                    sign: sign_b,
+                    value: value_b,
+                },
+            ) => {
+                if sign_a ^ sign_b {
+                    let a = BigNatural::NonZero(value_a);
+                    let b = BigNatural::NonZero(value_b);
+                    let (small, big, sign) = if a > b {
+                        (b, a, sign_a)
+                    } else {
+                        (a, b, sign_b)
+                    };
+                    Self::NonZero {
+                        sign,
+                        value: match big - small {
+                            BigNatural::NonZero(n) => n,
+                            BigNatural::Zero => panic!("Sub wrong"),
+                        },
+                    }
+                } else {
+                    Self::NonZero {
+                        sign: sign_a,
+                        value: match BigNatural::NonZero(value_a) + BigNatural::NonZero(value_b) {
+                            BigNatural::NonZero(n) => n,
+                            BigNatural::Zero => panic!("Add wrong"),
+                        },
+                    }
+                }
+            }
+            (n, Self::Zero) => n,
+            (Self::Zero, n) => n,
         }
     }
 }
