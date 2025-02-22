@@ -32,29 +32,37 @@ fn gcd() {
     assert_eq!(12, 4.lcm(6));
     assert_eq!(30, 10.lcm(15));
 }
+impl BigNatural {
+    fn get_vec(&self) -> Vec<u8> {
+        match self {
+            Self::NonZero(n) => (*n.clone()).clone(),
+            Self::Zero => vec![],
+        }
+    }
+}
 #[test]
 fn big_natural() {
-    assert_eq!(vec![] as Vec<u8>, *BigNatural::from(0x0000000000000000).0);
-    assert_eq!(vec![0x12], *BigNatural::from(0x0000000000000012).0);
+    assert_eq!(vec![] as Vec<u8>, BigNatural::from(0x0000000000000000).get_vec());
+    assert_eq!(vec![0x12], BigNatural::from(0x0000000000000012).get_vec());
     assert_eq!(
         vec![0x12, 0x00, 0x34, 0x00, 0x56],
-        *BigNatural::from(0x0000005600340012_u128).0
+        BigNatural::from(0x0000005600340012_u128).get_vec()
     );
     assert_eq!(
         vec![0x32, 0x54, 0x76, 0x98, 0x78, 0x56, 0x34, 0x12],
-        *BigNatural::from(0x1234567898765432_u128).0
+        BigNatural::from(0x1234567898765432_u128).get_vec()
     );
     assert_eq!(
         vec![0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe],
-        *BigNatural::from(0xfedcba9876543210_u128).0
+        BigNatural::from(0xfedcba9876543210_u128).get_vec()
     );
     assert_eq!(
         vec![0x10, 0x32, 0x54, 0x76, 0x98, 0xba],
-        *BigNatural::from(vec![0xba98_u16, 0x7654, 0x3210]).0
+        BigNatural::from(vec![0xba98_u16, 0x7654, 0x3210]).get_vec()
     );
     assert_eq!(
         vec![1, 2, 3, 4, 5],
-        *BigNatural::from(vec![5_u8, 4, 3, 2, 1]).0,
+        BigNatural::from(vec![5_u8, 4, 3, 2, 1]).get_vec(),
     );
 
     assert!(BigNatural::from(0x100001) != BigNatural::from(0x00));
