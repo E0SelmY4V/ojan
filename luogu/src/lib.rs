@@ -189,7 +189,7 @@ impl BigNatural {
     pub fn new() -> Self {
         BigNatural::Zero
     }
-    fn add_impl(a: &Vec<u8>, mut b: Vec<u8>, pre: bool) -> (Vec<u8>, bool) {
+    fn add_impl(a: &[u8], mut b: Vec<u8>, pre: bool) -> (Vec<u8>, bool) {
         assert!(a.len() <= b.len());
         let mut next = a
             .iter()
@@ -210,7 +210,7 @@ impl BigNatural {
         }
         (b, next)
     }
-    fn add_algo(a: &Vec<u8>, b: Vec<u8>) -> Vec<u8> {
+    fn add_algo(a: &[u8], b: Vec<u8>) -> Vec<u8> {
         let (mut result, next) = Self::add_impl(a, b, false);
         if next {
             result.push(1);
@@ -227,18 +227,17 @@ impl BigNatural {
             vec.pop();
         }
     }
-    fn sub_impl(a: &Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
+    fn sub_impl(a: &[u8], b: &[u8]) -> (Vec<u8>, bool) {
         let filled: Vec<u8> = b
             .iter()
             .map(|&n| !n)
-            .chain(repeat(0xff))
-            .take(a.len())
+            .chain(repeat_n(u8::MAX, a.len() - b.len()))
             .collect();
-        let (mut result, _) = Self::add_impl(&a, filled, true);
+        let (mut result, success) = Self::add_impl(&a, filled, true);
         Self::clear_zero(&mut result);
-        result
+        (result, success)
     }
-    fn mul_impl(a: &Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
+    fn mul_impl(a: &[u8], b: &[u8]) -> Vec<u8> {
         let mut results =
             repeat(())
                 .map(|_| vec![0; b.len() + 1])
@@ -259,7 +258,7 @@ impl BigNatural {
         let mut level = 0;
         let mut result = results.next().unwrap_or_default();
         while let Some(r) = Self::binary_mul_add(level, &mut results) {
-            result = Self::shl_add(level, &result, r);
+            Self::shl_add(level, &mut result, r);
             level += 1;
         }
         result
@@ -268,17 +267,19 @@ impl BigNatural {
         if level == 0 {
             results.next()
         } else {
-            Self::binary_mul_add(level - 1, results).and_then(|a| {
-                Self::binary_mul_add(level - 1, results)
-                    .and_then(|b| Some(Self::shl_add(level - 1, &a, b)))
-                    .or(Some(a))
+            Self::binary_mul_add(level - 1, results).and_then(|mut a| {
+                if let Some(b) = Self::binary_mul_add(level - 1, results) {
+                    Self::shl_add(level - 1, &mut a, b);
+                }
+                Some(a)
             })
         }
     }
-    fn shl_add(pos: u8, a: &Vec<u8>, b: Vec<u8>) -> Vec<u8> {
-        let mut b_filled: Vec<u8> = vec![0; 1 << pos];
-        b_filled.extend(b.into_iter());
-        Self::add_algo(a, b_filled)
+    fn shl_add(level: u8, a: &mut Vec<u8>, b: Vec<u8>) {
+        let pos = (1 << level) as usize;
+        let r = Self::add_algo(&a[pos..], b);
+        a.truncate(pos);
+        a.extend(r);
     }
 }
 macro_rules! impl_big_natural_from {
@@ -370,16 +371,20 @@ impl Add for BigNatural {
 impl Sub for BigNatural {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        match self.cmp(&rhs) {
-            Ordering::Greater => match rhs {
-                Self::NonZero(b) => match self {
-                    Self::NonZero(a) => Self::NonZero(Rc::new(Self::sub_impl(&a, &b))),
-                    Self::Zero => panic!("Compare wrong"),
-                },
-                Self::Zero => self,
+        match rhs {
+            Self::NonZero(b) => match self {
+                Self::NonZero(a) => {
+                    let (result, success) = Self::sub_impl(&a, &b);
+                    assert!(success, "Sub overflow");
+                    if result.is_empty() {
+                        Self::Zero
+                    } else {
+                        Self::NonZero(Rc::new(result))
+                    }
+                }
+                Self::Zero => Self::Zero,
             },
-            Ordering::Equal => Self::Zero,
-            Ordering::Less => panic!("Sub overflow"),
+            Self::Zero => self,
         }
     }
 }
@@ -427,24 +432,27 @@ impl BigNatural {
         assert!(diver != 0);
         match self {
             Self::NonZero(n) => {
-                if n.len() == 1 {
-                    ((n[0] / diver).into(), n[0] % diver)
-                } else {
-                    let diver = diver as u16;
-                    let mut result = vec![0; n.len()];
-                    let dived =
-                        n.iter()
-                            .rev()
-                            .zip(result.iter_mut())
-                            .fold(0, |pre, (&now, r_p)| {
-                                let n = ((pre as u16) << 8) + now as u16;
-                                *r_p = (n / diver) as u8;
-                                (n % diver) as u8
-                            });
-                    result.reverse();
-                    Self::pop_zero(&mut result);
-                    (Self::NonZero(Rc::new(result)), dived)
-                }
+                let diver = diver as u16;
+                let mut result = vec![0; n.len()];
+                let dived = n
+                    .iter()
+                    .rev()
+                    .zip(result.iter_mut())
+                    .fold(0, |pre, (&now, r_p)| {
+                        let n = ((pre as u16) << 8) + now as u16;
+                        *r_p = (n / diver) as u8;
+                        (n % diver) as u8
+                    });
+                result.reverse();
+                Self::pop_zero(&mut result);
+                (
+                    if result.is_empty() {
+                        Self::Zero
+                    } else {
+                        Self::NonZero(Rc::new(result))
+                    },
+                    dived,
+                )
             }
             _ => (Self::Zero, 0),
         }
@@ -516,13 +524,11 @@ impl FromStr for BigNatural {
             Ok(input.into())
         } else {
             let mut result = BigNatural::new();
-            let mut power = BigNatural::from(1_u8);
             let ten = BigNatural::from(10_u8);
             let codes: Vec<BigNatural> = (0..=9_u8).map(BigNatural::from).collect();
-            for c in s.chars().rev().filter(|&n| n != '_') {
+            for c in s.chars().filter(|&n| n != '_') {
                 if ('0'..='9').contains(&c) {
-                    result = result + codes[c as usize - '0' as usize].clone() * power.clone();
-                    power = power * ten.clone();
+                    result = result * ten.clone() + codes[c as usize - '0' as usize].clone();
                 } else {
                     return Err(BigNaturalParseErr::WrongChar);
                 }
