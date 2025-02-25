@@ -13,7 +13,7 @@ use std::{
     fmt::Display,
     iter::{repeat, repeat_n},
     num::ParseIntError,
-    ops::{Add, Mul, Sub},
+    ops::{Add, Mul, Shl, Shr, Sub},
     rc::Rc,
     str::FromStr,
 };
@@ -462,6 +462,85 @@ impl BigNatural {
                 )
             }
             _ => (Self::Zero, 0),
+        }
+    }
+}
+impl BigNatural {
+    const SIZE_IN: usize = size_of::<u8>() * 8;
+    fn shr_in_size(r: &mut Vec<u8>, rhs: usize) {
+        r.iter_mut().rev().fold(0, |pre, now| {
+            let next = *now << (Self::SIZE_IN - rhs);
+            *now = pre | (*now >> rhs);
+            next
+        });
+        Self::pop_zero(r);
+    }
+    fn shl_in_size(r: &mut Vec<u8>, rhs: usize, na: usize) {
+        let next = r.iter_mut().skip(na).fold(0, |pre, now| {
+            let next = *now >> (Self::SIZE_IN - rhs);
+            *now = pre | (*now << rhs);
+            next
+        });
+        if next != 0 {
+            r.push(next);
+        }
+    }
+}
+impl Shr<usize> for BigNatural {
+    type Output = Self;
+    fn shr(self, rhs: usize) -> Self::Output {
+        match self {
+            Self::NonZero(r_ori) => {
+                let mut r = r_ori.to_vec();
+                r.drain(0..(rhs / Self::SIZE_IN));
+                let m = rhs % Self::SIZE_IN;
+                if m != 0 {
+                    Self::shr_in_size(&mut r, m);
+                }
+                if r.is_empty() {
+                    Self::Zero
+                } else {
+                    Self::NonZero(Rc::new(r))
+                }
+            }
+            n => n,
+        }
+    }
+}
+impl Shl<usize> for BigNatural {
+    type Output = Self;
+    fn shl(self, rhs: usize) -> Self::Output {
+        match self {
+            Self::NonZero(r_ori) => {
+                let na = rhs / Self::SIZE_IN;
+                let mut r = Vec::with_capacity(na + r_ori.len() + 1);
+                r.extend(repeat_n(0, na));
+                r.extend_from_slice(&r_ori);
+                let m = rhs % Self::SIZE_IN;
+                if m != 0 {
+                    Self::shl_in_size(&mut r, m, na);
+                }
+                Self::NonZero(Rc::new(r))
+            }
+            n => n,
+        }
+    }
+}
+impl Shr for BigNatural {
+    type Output = Self;
+    fn shr(self, rhs: Self) -> Self::Output {
+        match rhs {
+            Self::NonZero(r) => self >> *r.get(0).unwrap() as usize,
+            Self::Zero => self,
+        }
+    }
+}
+impl Shl for BigNatural {
+    type Output = Self;
+    fn shl(self, rhs: Self) -> Self::Output {
+        match rhs {
+            Self::NonZero(r) => self << *r.get(0).unwrap() as usize,
+            Self::Zero => self,
         }
     }
 }

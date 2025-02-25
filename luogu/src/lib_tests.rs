@@ -104,6 +104,12 @@ fn big_natural() {
         ($u1:literal * $u2:literal) => {
             tcalc!($u1, $u2, mul);
         };
+        ($u1:literal >> $u2:literal) => {
+            tcalc!($u1, $u2, shr);
+        };
+        ($u1:literal << $u2:literal) => {
+            tcalc!($u1, $u2, shl);
+        };
         ($u1:literal, $u2:literal, $ops:ident) => {
             let t = tcalc!($u1, $u2);
             assert_eq!(
@@ -142,6 +148,18 @@ fn big_natural() {
     tcalc!(921823 * 18239912);
     tcalc!(18239912 * 921823);
     tcalc!(92738287 * 1923);
+
+    tcalc!(0x6199afbca993 >> 0);
+    tcalc!(0x2817afbdbb >> 1);
+    tcalc!(0x0194abbc71baba >> 2);
+    tcalc!(0x828dbbaff191ccccccc >> 3);
+    tcalc!(0x91837abcd8f1 >> 19);
+
+    tcalc!(0x6199afbca993 << 0);
+    tcalc!(0x2817afbdbb << 1);
+    tcalc!(0x0194abbc71baba << 2);
+    tcalc!(0x828dbbaff191ccccccc << 3);
+    tcalc!(0x91837abcd8f1 << 19);
 
     tcalc!(13 /_short 4);
     tcalc!(1238732 /_short 76);
