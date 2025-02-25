@@ -189,7 +189,7 @@ impl BigNatural {
     pub fn new() -> Self {
         BigNatural::Zero
     }
-    fn add_impl(a: &[u8], mut b: Vec<u8>, pre: bool) -> (Vec<u8>, bool) {
+    fn add_impl(a: &[u8], b: &mut Vec<u8>, pre: bool) -> bool {
         assert!(a.len() <= b.len());
         let mut next = a
             .iter()
@@ -208,14 +208,12 @@ impl BigNatural {
             }
             (*b_p, next) = (*b_p).overflowing_add(1);
         }
-        (b, next)
+        next
     }
-    fn add_algo(a: &[u8], b: Vec<u8>) -> Vec<u8> {
-        let (mut result, next) = Self::add_impl(a, b, false);
-        if next {
-            result.push(1);
+    fn add_algo(a: &[u8], b: &mut Vec<u8>) {
+        if Self::add_impl(a, b, false) {
+            b.push(1);
         }
-        result
     }
     fn clear_zero(vec: &mut Vec<u8>) {
         while Some(&0) == vec.last() {
@@ -227,15 +225,21 @@ impl BigNatural {
             vec.pop();
         }
     }
-    fn sub_impl(a: &[u8], b: &[u8]) -> (Vec<u8>, bool) {
-        let filled: Vec<u8> = b
-            .iter()
-            .map(|&n| !n)
-            .chain(repeat_n(u8::MAX, a.len() - b.len()))
-            .collect();
-        let (mut result, success) = Self::add_impl(&a, filled, true);
+    fn sub_impl(a: &[u8], b: &mut Vec<u8>) -> bool {
+        b.iter_mut().for_each(|p| *p = !*p);
+        b.extend(repeat_n(u8::MAX, a.len() - b.len()));
+        let success = Self::add_impl(a, b, true);
+        Self::clear_zero(b);
+        success
+    }
+    fn wrap_zero(mut result: Vec<u8>) -> Self {
         Self::clear_zero(&mut result);
-        (result, success)
+        if result.is_empty() {
+            Self::Zero
+        } else {
+            result.shrink_to_fit();
+            Self::NonZero(Rc::new(result))
+        }
     }
     fn mul_impl(a: &[u8], b: &[u8]) -> Vec<u8> {
         let mut results =
@@ -257,8 +261,8 @@ impl BigNatural {
                 });
         let mut level = 0;
         let mut result = results.next().unwrap_or_default();
-        while let Some(r) = Self::binary_mul_add(level, &mut results) {
-            Self::shl_add(level, &mut result, r);
+        while let Some(mut r) = Self::binary_mul_add(level, &mut results) {
+            Self::shl_add(level, &mut result, &mut r);
             level += 1;
         }
         result
@@ -268,18 +272,18 @@ impl BigNatural {
             results.next()
         } else {
             Self::binary_mul_add(level - 1, results).and_then(|mut a| {
-                if let Some(b) = Self::binary_mul_add(level - 1, results) {
-                    Self::shl_add(level - 1, &mut a, b);
+                if let Some(mut b) = Self::binary_mul_add(level - 1, results) {
+                    Self::shl_add(level - 1, &mut a, &mut b);
                 }
                 Some(a)
             })
         }
     }
-    fn shl_add(level: u8, a: &mut Vec<u8>, b: Vec<u8>) {
+    fn shl_add(level: u8, a: &mut Vec<u8>, b: &mut Vec<u8>) {
         let pos = (1 << level) as usize;
-        let r = Self::add_algo(&a[pos..], b);
+        Self::add_algo(&a[pos..], b);
         a.truncate(pos);
-        a.extend(r);
+        a.extend(b.iter());
     }
 }
 macro_rules! impl_big_natural_from {
@@ -291,30 +295,21 @@ macro_rules! impl_big_natural_from {
         }
         num_vec
     }};
-    (wrap, $result:ident) => {{
-        Self::clear_zero(&mut $result);
-        if $result.len() == 0 {
-            Self::Zero
-        } else {
-            Self::NonZero(Rc::new($result))
-        }
-    }};
     (long, $type:ty) => {
         impl From<$type> for BigNatural {
             fn from(mut num: $type) -> Self {
-                let mut result = impl_big_natural_from!(_impl, num: $type);
-                impl_big_natural_from!(wrap, result)
+                Self::wrap_zero(impl_big_natural_from!(_impl, num: $type))
             }
         }
         impl From<Vec<$type>> for BigNatural {
             fn from(vec: Vec<$type>) -> Self {
-                let mut result = vec
+                Self::wrap_zero(vec
                     .into_iter()
                     .map(|mut num| impl_big_natural_from!(_impl, num: $type))
                     .rev()
                     .collect::<Vec<Vec<u8>>>()
-                    .concat();
-                impl_big_natural_from!(wrap, result)
+                    .concat()
+                )
             }
         }
     };
@@ -330,8 +325,7 @@ macro_rules! impl_big_natural_from {
         }
         impl From<Vec<$type>> for BigNatural {
             fn from(vec: Vec<$type>) -> Self {
-                let mut result = vec.into_iter().map(|n| n as u8).rev().collect();
-                impl_big_natural_from!(wrap, result)
+                Self::wrap_zero(vec.into_iter().map(|n| n as u8).rev().collect())
             }
         }
     };
@@ -358,13 +352,17 @@ impl Add for BigNatural {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::NonZero(a), Self::NonZero(b)) => Self::NonZero(Rc::new(if a.len() < b.len() {
-                Self::add_algo(&a, b.to_vec())
-            } else {
-                Self::add_algo(&b, a.to_vec())
-            })),
-            (n, Self::Zero) => n,
+            (Self::NonZero(a), Self::NonZero(b)) => {
+                let (small, mut big) = if a.len() < b.len() {
+                    (a, b.to_vec())
+                } else {
+                    (b, a.to_vec())
+                };
+                Self::add_algo(&small, &mut big);
+                Self::NonZero(Rc::new(big))
+            }
             (Self::Zero, n) => n,
+            (n, Self::Zero) => n,
         }
     }
 }
@@ -372,15 +370,12 @@ impl Sub for BigNatural {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         match rhs {
-            Self::NonZero(b) => match self {
+            Self::NonZero(rhs) => match self {
                 Self::NonZero(a) => {
-                    let (result, success) = Self::sub_impl(&a, &b);
+                    let mut b = rhs.to_vec();
+                    let success = Self::sub_impl(&a, &mut b);
                     assert!(success, "Sub overflow");
-                    if result.is_empty() {
-                        Self::Zero
-                    } else {
-                        Self::NonZero(Rc::new(result))
-                    }
+                    Self::wrap_zero(b)
                 }
                 Self::Zero => Self::Zero,
             },
@@ -460,9 +455,12 @@ impl BigNatural {
 }
 impl Display for BigNatural {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut dis_list = vec![];
+        let mut dis_list;
         match self {
-            Self::NonZero(_) => {
+            Self::NonZero(n) => {
+                dis_list = Vec::with_capacity(
+                    ((size_of::<u8>() * n.len()) as f64 * 2_f64.log10()) as usize + 1,
+                );
                 let mut me = self.clone();
                 let mut dived;
                 while me != Self::Zero {
@@ -471,7 +469,7 @@ impl Display for BigNatural {
                 }
             }
             Self::Zero => {
-                dis_list.push('0');
+                dis_list = vec!['0'];
             }
         }
         write!(f, "{}", String::from_iter(dis_list.into_iter().rev()))?;
