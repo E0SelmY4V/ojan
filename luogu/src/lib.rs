@@ -241,6 +241,8 @@ impl BigNatural {
             Self::NonZero(Rc::new(result))
         }
     }
+    const POS: usize = size_of::<u8>() * 4;
+    const COVER: u8 = u8::MAX >> Self::POS;
     fn mul_impl(a: &[u8], b: &[u8]) -> Vec<u8> {
         let mut results =
             repeat(())
@@ -250,10 +252,20 @@ impl BigNatural {
                     b.iter().chain(repeat_n(&0, 1)).zip(line.iter_mut()).fold(
                         0,
                         |pre, (&b_num, line_p)| {
-                            let r = (b_num as u16) * (a_num as u16);
-                            let n = r + pre as u16;
-                            *line_p = n as u8;
-                            (n >> 8) as u8
+                            let mut a_low = a_num & Self::COVER;
+                            let a_high = a_num >> Self::POS;
+                            let mut b_low = b_num & Self::COVER;
+                            let b_high = b_num >> Self::POS;
+                            let t0 = a_low * b_low;
+                            a_low *= b_high;
+                            b_low = a_high * b_low + (t0 >> Self::POS) + (a_low & Self::COVER);
+                            let j;
+                            (*line_p, j) =
+                                ((b_low << Self::POS) | (t0 & Self::COVER)).overflowing_add(pre);
+                            a_high * b_high
+                                + (a_low >> Self::POS)
+                                + (b_low >> Self::POS)
+                                + if j { 1 } else { 0 }
                         },
                     );
                     Self::pop_zero(&mut line);
