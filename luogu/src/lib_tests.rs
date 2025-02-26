@@ -42,7 +42,10 @@ impl BigNatural {
 }
 #[test]
 fn big_natural() {
-    assert_eq!(vec![] as Vec<u8>, BigNatural::from(0x0000000000000000).get_vec());
+    assert_eq!(
+        vec![] as Vec<u8>,
+        BigNatural::from(0x0000000000000000).get_vec()
+    );
     assert_eq!(vec![0x12], BigNatural::from(0x0000000000000012).get_vec());
     assert_eq!(
         vec![0x12, 0x00, 0x34, 0x00, 0x56],
@@ -110,6 +113,12 @@ fn big_natural() {
         ($u1:literal << $u2:literal) => {
             tcalc!($u1, $u2, shl);
         };
+        ($u1:literal / $u2:literal) => {
+            tcalc!($u1, $u2, div);
+        };
+        ($u1:literal % $u2:literal) => {
+            tcalc!($u1, $u2, rem);
+        };
         ($u1:literal, $u2:literal, $ops:ident) => {
             let t = tcalc!($u1, $u2);
             assert_eq!(
@@ -136,6 +145,8 @@ fn big_natural() {
     tcalc!(0x100000000 - 1);
     tcalc!(267478328917 - 7283719283);
     tcalc!(998244353 - 998244353);
+    tcalc!(0x6642ffaa - 0x564dafcc);
+    tcalc!(0xf543a - 0xff);
 
     tcalc!(0 * 0);
     tcalc!(0 * 912638932);
@@ -167,6 +178,25 @@ fn big_natural() {
     tcalc!(0 /_short 146);
     tcalc!(1 /_short 146);
     tcalc!(1986 /_short 1);
+
+    tcalc!(8764346792 / 1);
+    tcalc!(764306364 / 2);
+    tcalc!(7651029391012 / 10392);
+    tcalc!(38478382912 / 182930402);
+    tcalc!(6 / 2);
+    tcalc!(1 / 1);
+    tcalc!(14 / 5);
+    tcalc!(1882727373 / 1992838991929);
+    tcalc!(29291993716637271_u128 / 998244353_u128);
+
+    tcalc!(818939492 % 1);
+    tcalc!(29291993716637271 % 998244353);
+    tcalc!(81737291981189392181 % 192929910293201);
+    tcalc!(9919 % 2);
+    tcalc!(9199 % 1994848299210);
+    tcalc!(1 % 1);
+    tcalc!(2 % 2);
+    tcalc!(0xff1828 % 0x18face);
 
     macro_rules! tinput {
         ($l:literal) => {

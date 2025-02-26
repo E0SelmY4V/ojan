@@ -10,3 +10,4 @@ use_as_now!(p1055);
 pub fn main() {
     now::main();
 }
+
