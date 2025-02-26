@@ -91,13 +91,6 @@ fn big_natural() {
     );
 
     macro_rules! tcalc {
-        ($u1:literal /_short $u2:literal) => {
-            let t = BigNatural::from($u1 as u128);
-            let (result, dived) = t.div_short($u2);
-            assert_eq!(result, BigNatural::from($u1 as u128 / $u2 as u128));
-            assert_eq!(dived, ($u1 as u128 % $u2) as u8);
-            assert_eq!(t, BigNatural::from($u1 as u128));
-        };
         ($u1:literal + $u2:literal) => {
             tcalc!($u1, $u2, add);
         };
@@ -171,13 +164,6 @@ fn big_natural() {
     tcalc!(0x0194abbc71baba << 2);
     tcalc!(0x828dbbaff191ccccccc << 3);
     tcalc!(0x91837abcd8f1 << 19);
-
-    tcalc!(13 /_short 4);
-    tcalc!(1238732 /_short 76);
-    tcalc!(98126382340 /_short 23);
-    tcalc!(0 /_short 146);
-    tcalc!(1 /_short 146);
-    tcalc!(1986 /_short 1);
 
     tcalc!(8764346792 / 1);
     tcalc!(764306364 / 2);

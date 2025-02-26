@@ -442,30 +442,6 @@ impl Mul for BigNatural {
     }
 }
 impl BigNatural {
-    pub fn div_short(&self, diver: u8) -> (Self, u8) {
-        assert!(diver != 0);
-        match self {
-            Self::NonZero(n) => {
-                let diver = diver as u16;
-                let mut result = vec![0; n.len()];
-                let dived = n
-                    .iter()
-                    .rev()
-                    .zip(result.iter_mut())
-                    .fold(0, |pre, (&now, r_p)| {
-                        let n = ((pre as u16) << 8) + now as u16;
-                        *r_p = (n / diver) as u8;
-                        (n % diver) as u8
-                    });
-                result.reverse();
-                Self::pop_zero(&mut result);
-                (Self::wrap_empty(result), dived)
-            }
-            _ => (Self::Zero, 0),
-        }
-    }
-}
-impl BigNatural {
     const SIZE_IN: usize = size_of::<u8>() * 8;
     fn shr_in_size(r: &mut Vec<u8>, rhs: usize) {
         let les = Self::SIZE_IN - rhs;
@@ -622,11 +598,17 @@ impl Display for BigNatural {
                 dis_list = Vec::with_capacity(
                     ((size_of::<u8>() * n.len()) as f64 * 2_f64.log10()) as usize + 1,
                 );
+                let ten = Self::from(10);
                 let mut me = self.clone();
                 let mut dived;
                 while me != Self::Zero {
-                    (me, dived) = me.div_short(10);
-                    dis_list.push((dived + '0' as u8) as char);
+                    (me, dived) = me.div_mod(&ten);
+                    dis_list.push(
+                        (match dived {
+                            Self::Zero => 0,
+                            Self::NonZero(r) => *r.get(0).unwrap(),
+                        } + '0' as u8) as char,
+                    );
                 }
             }
             Self::Zero => {
