@@ -32,7 +32,7 @@ fn gcd() {
     assert_eq!(12, 4.lcm(6));
     assert_eq!(30, 10.lcm(15));
 }
-impl BigNatural {
+impl BigNatural<u8> {
     fn get_vec(&self) -> Vec<u8> {
         match self {
             Self::NonZero(n) => (*n.clone()).clone(),
@@ -68,27 +68,61 @@ fn big_natural() {
         BigNatural::from(vec![5_u8, 4, 3, 2, 1]).get_vec(),
     );
 
-    assert!(BigNatural::from(0x100001) != BigNatural::from(0x00));
-    assert!(BigNatural::from(0x100001) != BigNatural::from(0x101101));
-    assert!(BigNatural::from(0x103400) != BigNatural::from(0x100034));
-    assert!(BigNatural::from(0x63f8a9) == BigNatural::from(0x63f8a9));
-    assert!(BigNatural::from(0) == BigNatural::from(0));
-    assert!(BigNatural::from(0xff00) > BigNatural::from(0xff));
-    assert!(BigNatural::from(0x1234) < BigNatural::from(0x2234));
-    assert!(BigNatural::from(0x1234) < BigNatural::from(0x1235));
+    macro_rules! tcmp {
+        ($a:literal  == $b:literal ) => {
+            tcmp!($a, eq, $b);
+        };
+        ($a:literal  < $b:literal ) => {
+            tcmp!($a, le, $b);
+        };
+        ($a:literal  > $b:literal ) => {
+            tcmp!($a, ge, $b);
+        };
+        ($a:literal != $b:literal ) => {
+            tcmp!($a, ne, $b);
+        };
+        ($a:literal, $op:ident, $b:literal) => {
+            tcmp!($a, $op, $b, u8);
+            tcmp!($a, $op, $b, u16);
+            tcmp!($a, $op, $b, u32);
+            tcmp!($a, $op, $b, u64);
+            tcmp!($a, $op, $b, u128);
+        };
+        ($a:literal, $op:ident, $b:literal, $t:ty) => {
+            assert!(&<BigNatural<$t>>::from($a).$op(&<BigNatural<$t>>::from($b)));
+        };
+    }
+    tcmp!(0x100001 != 0x00);
+    tcmp!(0x100001 != 0x101101);
+    tcmp!(0x103400 != 0x100034);
+    tcmp!(0x63f8a9 == 0x63f8a9);
+    tcmp!(0 == 0);
+    tcmp!(0xff00 > 0xff);
+    tcmp!(0x1234 < 0x2234);
+    tcmp!(0x1234 < 0x1235);
 
-    assert_eq!("0", format!("{}", BigNatural::from(0)));
-    assert_eq!("1", format!("{}", BigNatural::from(1)));
-    assert_eq!("12345678", format!("{}", BigNatural::from(12345678)));
-    assert_eq!(
-        "8902367478",
-        format!("{}", BigNatural::from(8902367478_u128))
-    );
-    assert_eq!("998244353", format!("{}", BigNatural::from(998244353_u128)));
-    assert_eq!(
-        "981678389900",
-        format!("{}", BigNatural::from(981678389900_u128))
-    );
+    macro_rules! tfmt {
+        ($a:literal) => {
+            tfmt!($a, u8);
+            tfmt!($a, u16);
+            tfmt!($a, u32);
+            tfmt!($a, u64);
+            tfmt!($a, u128);
+        };
+        ($num:literal, $t:ty) => {
+            assert_eq!(
+                stringify!($num),
+                format!("{}", <BigNatural<$t>>::from($num as u128))
+            );
+        };
+    }
+
+    tfmt!(0);
+    tfmt!(1);
+    tfmt!(12345678);
+    tfmt!(8902367478);
+    tfmt!(998244353);
+    tfmt!(981678389900);
 
     macro_rules! tcalc {
         ($u1:literal + $u2:literal) => {
@@ -113,15 +147,25 @@ fn big_natural() {
             tcalc!($u1, $u2, rem);
         };
         ($u1:literal, $u2:literal, $ops:ident) => {
-            let t = tcalc!($u1, $u2);
+            tcalc!($u1, $u2, $ops, u8);
+            tcalc!($u1, $u2, $ops, u16);
+            tcalc!($u1, $u2, $ops, u32);
+            tcalc!($u1, $u2, $ops, u64);
+            tcalc!($u1, $u2, $ops, u128);
+        };
+        ($u1:literal, $u2:literal, $ops:ident, $t:ty) => {
+            let t = tcalc!($u1, $u2, $t);
             assert_eq!(
                 t.0.clone().$ops(t.1.clone()),
-                BigNatural::from(u128::$ops($u1, $u2))
+                <BigNatural<$t>>::from(u128::$ops($u1, $u2))
             );
-            assert_eq!(t, tcalc!($u1, $u2));
+            assert_eq!(t, tcalc!($u1, $u2, $t));
         };
-        ($u1:expr, $u2:expr) => {
-            (BigNatural::from($u1 as u128), BigNatural::from($u2 as u128))
+        ($u1:expr, $u2:expr, $t:ty) => {
+            (
+                <BigNatural<$t>>::from($u1 as u128),
+                <BigNatural<$t>>::from($u2 as u128),
+            )
         };
     }
 
@@ -185,10 +229,17 @@ fn big_natural() {
     tcalc!(0xff1828 % 0x18face);
 
     macro_rules! tinput {
-        ($l:literal) => {
+        ($u1:literal) => {
+            tinput!($u1, u8);
+            tinput!($u1, u16);
+            tinput!($u1, u32);
+            tinput!($u1, u64);
+            tinput!($u1, u128);
+        };
+        ($l:literal, $t:ty) => {
             assert_eq!(
-                stringify!($l).parse::<BigNatural>().unwrap(),
-                BigNatural::from($l)
+                stringify!($l).parse::<BigNatural<$t>>().unwrap(),
+                <BigNatural<$t>>::from($l)
             );
         };
     }
