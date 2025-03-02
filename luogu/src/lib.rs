@@ -15,8 +15,7 @@ use std::{
     mem::swap,
     num::ParseIntError,
     ops::{
-        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, Mul, MulAssign, Neg, Not,
-        Rem, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
+        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign
     },
     rc::Rc,
     str::FromStr,
@@ -146,43 +145,28 @@ pub trait Gcdable {
     fn gcd(&self, other: Self) -> Self;
     fn lcm(&self, other: Self) -> Self;
 }
-macro_rules! impl_gcd {
-    ($type: ty) => {
-        impl Gcdable for $type {
-            fn gcd(&self, mut b: Self) -> Self {
-                assert!(*self != 0 && b != 0);
-                let mut a = *self;
-                impl_gcd!(a, b)
-            }
-            fn lcm(&self, mut b: Self) -> Self {
-                if *self == 0 || b == 0 {
-                    0
-                } else {
-                    let mut a = *self;
-                    (a * b) / impl_gcd!(a, b)
-                }
-            }
+fn gcd_impl<T: Integer>(mut a: T, mut b: T) -> T {
+        while b != T::ZERO {
+            a %= b;
+            swap(&mut a, &mut b);
         }
-    };
-    ($a: ident, $b: ident) => {{
-        while $b != 0 {
-            let temp = $b;
-            $b = $a % $b;
-            $a = temp;
-        }
-        $a
-    }};
+        a
 }
-impl_gcd!(u8);
-impl_gcd!(u16);
-impl_gcd!(u32);
-impl_gcd!(u64);
-impl_gcd!(u128);
-impl_gcd!(i8);
-impl_gcd!(i16);
-impl_gcd!(i32);
-impl_gcd!(i64);
-impl_gcd!(i128);
+
+impl<T: Integer> Gcdable for T {
+    fn gcd(&self, b: Self) -> Self {
+        assert!(*self != T::ZERO && b != T::ZERO);
+        gcd_impl(*self, b)
+    }
+    fn lcm(&self, b: Self) -> Self {
+        if *self == T::ZERO || b == T::ZERO {
+            T::ZERO
+        } else {
+            let a = *self;
+            (a * b) / gcd_impl(a, b)
+        }
+    }
+}
 
 pub trait IterDeref {
     type Item;
@@ -205,6 +189,10 @@ pub trait Integer:
     + Not<Output = Self>
     + Mul<Output = Self>
     + MulAssign
+    + Div<Output = Self>
+    + DivAssign
+    + Rem<Output = Self>
+    + RemAssign
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
