@@ -289,15 +289,14 @@ impl_integer!(i, i64);
 impl_integer!(i, i128);
 impl_integer!(i, isize);
 
-#[derive(Debug)]
-pub enum BigNatural<T> {
-    NonZero(Rc<Vec<T>>),
-    Zero,
+#[derive(Debug, Clone)]
+pub struct BigNatural<T>(Rc<Vec<T>>);
+impl<T> BigNatural<T> {
+    pub fn new(vec: Vec<T>) -> Self {
+        Self(Rc::new(vec))
+    }
 }
 impl<T: Integer> BigNatural<T> {
-    pub fn new() -> Self {
-        BigNatural::Zero
-    }
     fn add_impl<'c>(
         a: impl Iterator<Item = T>,
         mut b: impl Iterator<Item = &'c mut T>,
@@ -346,19 +345,8 @@ impl<T: Integer> BigNatural<T> {
     }
     fn wrap_zero(mut result: Vec<T>) -> Self {
         Self::clear_value(&mut result, T::ZERO);
-        if result.is_empty() {
-            Self::Zero
-        } else {
-            result.shrink_to_fit();
-            Self::NonZero(Rc::new(result))
-        }
-    }
-    fn wrap_empty(result: Vec<T>) -> Self {
-        if result.is_empty() {
-            Self::Zero
-        } else {
-            Self::NonZero(Rc::new(result))
-        }
+        result.shrink_to_fit();
+        Self::new(result)
     }
     fn mul_impl(a: &[T], b: &[T]) -> Vec<T> {
         let mut result = vec![T::ZERO; a.len() + b.len()];
@@ -392,147 +380,17 @@ impl<T: Integer> BigNatural<T> {
         Self::pop_zero(&mut result);
         result
     }
-}
-struct BigNaturalBase(Vec<u8>);
-impl<T: Integer> From<T> for BigNaturalBase {
-    fn from(value: T) -> Self {
-        Self(value.to_le_bytes_vec())
-    }
-}
-impl<T: Integer> From<Vec<T>> for BigNaturalBase {
-    fn from(value: Vec<T>) -> Self {
-        Self(
-            value
-                .into_iter()
-                .rev()
-                .map(|v| v.to_le_bytes_vec())
-                .flatten()
-                .collect(),
-        )
-    }
-}
-impl<T: Integer> From<BigNaturalBase> for BigNatural<T> {
-    fn from(value: BigNaturalBase) -> Self {
-        let BigNaturalBase(mut vec) = value;
-        vec.extend(repeat_n(0, T::SIZE - (vec.len() % T::SIZE)));
-        let result = vec
-            .chunks(T::SIZE)
-            .map(|n| T::from_le_bytes_ref(n))
-            .collect();
-        Self::wrap_zero(result)
-    }
-}
-impl<T: Integer, F: Integer> From<F> for BigNatural<T> {
-    fn from(value: F) -> Self {
-        BigNatural::from(BigNaturalBase::from(value))
-    }
-}
-impl<T: Integer, F: Integer> From<Vec<F>> for BigNatural<T> {
-    fn from(value: Vec<F>) -> Self {
-        BigNatural::from(BigNaturalBase::from(value))
-    }
-}
-impl<T: Integer> BigNatural<T> {
     pub fn to_num<S: Integer>(&self) -> S {
-        match self {
-            Self::NonZero(r) => {
-                let bytes: Vec<u8> = r
-                    .iter()
-                    .map(|n| n.to_le_bytes_vec())
-                    .flatten()
-                    .chain(repeat(0))
-                    .take(S::SIZE)
-                    .collect();
-                S::from_le_bytes_ref(&bytes)
-            }
-            Self::Zero => S::ZERO,
-        }
+        let bytes: Vec<u8> = self
+            .0
+            .iter()
+            .map(|n| n.to_le_bytes_vec())
+            .flatten()
+            .chain(repeat(0))
+            .take(S::SIZE)
+            .collect();
+        S::from_le_bytes_ref(&bytes)
     }
-}
-impl<T> Clone for BigNatural<T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::NonZero(n) => Self::NonZero(Rc::clone(n)),
-            _ => Self::Zero,
-        }
-    }
-}
-impl<T: Integer> Add for BigNatural<T> {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::NonZero(mut a), Self::NonZero(mut b)) => {
-                if a.len() > b.len() {
-                    swap(&mut a, &mut b);
-                }
-                let mut result = b.to_vec();
-                Self::add_algo(a.iter_deref(), &mut result);
-                Self::NonZero(Rc::new(result))
-            }
-            (Self::Zero, n) => n,
-            (n, Self::Zero) => n,
-        }
-    }
-}
-impl<T: Integer> Sub for BigNatural<T> {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::NonZero(a), Self::NonZero(b)) => {
-                let mut a = a.to_vec();
-                let success = Self::sub_impl(&mut a, b.iter_deref());
-                assert!(success, "Sub overflow");
-                Self::wrap_zero(a)
-            }
-            (n, Self::Zero) => n,
-            (Self::Zero, Self::NonZero(_)) => panic!("Sub overflow"),
-        }
-    }
-}
-impl<T: Ord> Eq for BigNatural<T> {}
-impl<T: Ord> PartialEq for BigNatural<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other).is_eq()
-    }
-}
-impl<T: Ord> PartialOrd for BigNatural<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl<T: Ord> BigNatural<T> {
-    fn ord_impl(a: &[T], b: &[T]) -> Ordering {
-        match a.len().cmp(&b.len()) {
-            Ordering::Equal => a.iter().rev().cmp(b.iter().rev()),
-            n => n,
-        }
-    }
-}
-impl<T: Ord> Ord for BigNatural<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::NonZero(a), Self::NonZero(b)) => Self::ord_impl(&a, &b),
-            (Self::NonZero(_), Self::Zero) => Ordering::Greater,
-            (Self::Zero, Self::NonZero(_)) => Ordering::Less,
-            _ => Ordering::Equal,
-        }
-    }
-}
-impl<T: Integer> Mul for BigNatural<T> {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::NonZero(mut a), Self::NonZero(mut b)) => {
-                if a.len() > b.len() {
-                    swap(&mut a, &mut b);
-                }
-                Self::NonZero(Rc::new(Self::mul_impl(&a, &b)))
-            }
-            _ => Self::Zero,
-        }
-    }
-}
-impl<T: Integer> BigNatural<T> {
     fn shr_in_size_iter<'a>(r: &'a [T], rhs: usize) -> impl Iterator<Item = T> + 'a {
         let les = (T::BITS - rhs) as u32;
         let tail = r.last().copied().unwrap_or_default() >> rhs;
@@ -583,13 +441,16 @@ impl<T: Integer> BigNatural<T> {
         Self::pop_zero(&mut result);
         result
     }
-    fn div_mod_impl<const M: char>(a: &Rc<Vec<T>>, b: &Rc<Vec<T>>) -> (Self, Self) {
+    fn div_mod_pack<const M: char>(a: &Self, b: &Self) -> (Self, Self) {
+        let Self(a) = a;
+        let Self(b) = b;
         if a.len() < b.len() {
+            let d = Self::default();
             (
-                Self::Zero,
+                d.clone(),
                 match M {
-                    'd' => Self::Zero,
-                    _ => Self::NonZero(Rc::clone(a)),
+                    'd' => d.clone(),
+                    _ => Self(Rc::clone(a)),
                 },
             )
         } else {
@@ -597,99 +458,183 @@ impl<T: Integer> BigNatural<T> {
                 'm' => {
                     let mut m = a.to_vec();
                     Self::div_impl(&mut m, b);
-                    (Self::Zero, Self::wrap_empty(m))
+                    (Self::default(), Self::new(m))
                 }
                 'd' => (
-                    Self::wrap_empty(Self::div_impl(&mut a.to_vec(), b)),
-                    Self::Zero,
+                    Self::new(Self::div_impl(&mut a.to_vec(), b)),
+                    Self::default(),
                 ),
                 _ => {
                     let mut m = a.to_vec();
                     let r = Self::div_impl(&mut m, b);
-                    (Self::wrap_empty(r), Self::wrap_empty(m))
+                    (Self::new(r), Self::new(m))
                 }
             }
         }
     }
-    fn div_pack<const M: char>(&self, rhs: &Self) -> (Self, Self) {
-        match (self, rhs) {
-            (Self::NonZero(a), Self::NonZero(b)) => Self::div_mod_impl::<M>(a, b),
-            (_, Self::Zero) => panic!("Div 0"),
-            (Self::Zero, _) => (Self::Zero, Self::Zero),
-        }
-    }
     pub fn div_mod(&self, rhs: &Self) -> (Self, Self) {
-        self.div_pack::<'b'>(rhs)
+        Self::div_mod_pack::<'b'>(self, rhs)
     }
 }
+struct BigNaturalBase(Vec<u8>);
+impl<T: Integer> From<T> for BigNaturalBase {
+    fn from(value: T) -> Self {
+        Self(value.to_le_bytes_vec())
+    }
+}
+impl<T: Integer> From<Vec<T>> for BigNaturalBase {
+    fn from(value: Vec<T>) -> Self {
+        Self(
+            value
+                .into_iter()
+                .rev()
+                .map(|v| v.to_le_bytes_vec())
+                .flatten()
+                .collect(),
+        )
+    }
+}
+impl<T: Integer> From<BigNaturalBase> for BigNatural<T> {
+    fn from(value: BigNaturalBase) -> Self {
+        let BigNaturalBase(mut vec) = value;
+        vec.extend(repeat_n(0, T::SIZE - (vec.len() % T::SIZE)));
+        let result = vec
+            .chunks(T::SIZE)
+            .map(|n| T::from_le_bytes_ref(n))
+            .collect();
+        Self::wrap_zero(result)
+    }
+}
+impl<T: Integer, F: Integer> From<F> for BigNatural<T> {
+    fn from(value: F) -> Self {
+        BigNatural::from(BigNaturalBase::from(value))
+    }
+}
+impl<T: Integer, F: Integer> From<Vec<F>> for BigNatural<T> {
+    fn from(value: Vec<F>) -> Self {
+        BigNatural::from(BigNaturalBase::from(value))
+    }
+}
+impl<T> Default for BigNatural<T> {
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
+}
+impl<T: Integer> Add for BigNatural<T> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        let Self(mut a) = self;
+        let Self(mut b) = rhs;
+        if a.len() > b.len() {
+            swap(&mut a, &mut b);
+        }
+        let mut result = b.to_vec();
+        Self::add_algo(a.iter_deref(), &mut result);
+        Self(Rc::new(result))
+    }
+}
+impl<T: Integer> Sub for BigNatural<T> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        let mut a = self.0.to_vec();
+        let success = Self::sub_impl(&mut a, rhs.0.iter_deref());
+        assert!(success, "Sub overflow");
+        Self::wrap_zero(a)
+    }
+}
+impl<T: Ord> Eq for BigNatural<T> {}
+impl<T: Ord> PartialEq for BigNatural<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+impl<T: Ord> PartialOrd for BigNatural<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl<T: Ord> Ord for BigNatural<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.0.len().cmp(&other.0.len()) {
+            Ordering::Equal => self.0.iter().rev().cmp(other.0.iter().rev()),
+            n => n,
+        }
+    }
+}
+impl<T: Integer> Mul for BigNatural<T> {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        let Self(mut a) = self;
+        let Self(mut b) = rhs;
+        if a.is_empty() || b.is_empty() {
+            Self::default()
+        } else {
+            if a.len() > b.len() {
+                swap(&mut a, &mut b);
+            }
+            Self(Rc::new(Self::mul_impl(&a, &b)))
+        }
+    }
+}
+impl<T: Integer> BigNatural<T> {}
 impl<T: Integer> Shr<usize> for BigNatural<T> {
     type Output = Self;
     fn shr(self, rhs: usize) -> Self::Output {
-        match self {
-            Self::NonZero(r_ori) => Self::wrap_empty(
-                Self::shr_in_size_iter(&r_ori[(rhs / T::BITS)..], rhs % T::BITS).collect(),
-            ),
-            n => n,
+        let na = rhs / T::BITS;
+        if na >= self.0.len() {
+            Self::default()
+        } else {
+            Self::new(Self::shr_in_size_iter(&self.0[na..], rhs % T::BITS).collect())
         }
     }
 }
 impl<T: Integer> Shl<usize> for BigNatural<T> {
     type Output = Self;
     fn shl(self, rhs: usize) -> Self::Output {
-        match self {
-            Self::NonZero(r_ori) => Self::NonZero(Rc::new(
+        if self.0.is_empty() {
+            self
+        } else {
+            Self::new(
                 repeat_n(T::ZERO, rhs / T::BITS)
-                    .chain(Self::shl_in_size_iter(&r_ori, rhs % T::BITS))
+                    .chain(Self::shl_in_size_iter(&self.0, rhs % T::BITS))
                     .collect(),
-            )),
-            n => n,
+            )
         }
     }
 }
 impl<T: Integer> Shr for BigNatural<T> {
     type Output = Self;
     fn shr(self, rhs: Self) -> Self::Output {
-        match &rhs {
-            Self::NonZero(_) => self >> rhs.to_num::<usize>(),
-            Self::Zero => self,
-        }
+        self >> rhs.to_num::<usize>()
     }
 }
 impl<T: Integer> Shl for BigNatural<T> {
     type Output = Self;
     fn shl(self, rhs: Self) -> Self::Output {
-        match &rhs {
-            Self::NonZero(_) => self << rhs.to_num::<usize>(),
-            Self::Zero => self,
-        }
+        self << rhs.to_num::<usize>()
     }
 }
 impl<T: Integer> Div for BigNatural<T> {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
-        self.div_pack::<'d'>(&rhs).0
+        Self::div_mod_pack::<'d'>(&self, &rhs).0
     }
 }
 impl<T: Integer> Rem for BigNatural<T> {
     type Output = Self;
     fn rem(self, rhs: Self) -> Self::Output {
-        self.div_pack::<'m'>(&rhs).1
+        Self::div_mod_pack::<'m'>(&self, &rhs).1
     }
 }
 impl<T: Integer> BigNatural<T> {
-    fn fmt_impl(n: &Rc<Vec<T>>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut dis_list = Vec::with_capacity(size_of::<T>() * n.len() * 3 / 10 + 1);
+    fn fmt_impl(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut dis_list = Vec::with_capacity(size_of::<T>() * self.0.len() * 3 / 10 + 1);
         let ten = Self::from(10_u8);
-        let mut me = Self::NonZero(Rc::clone(n));
+        let mut me = self.clone();
         let mut dived;
-        while me != Self::Zero {
+        while !me.0.is_empty() {
             (me, dived) = me.div_mod(&ten);
-            dis_list.push(
-                (match &dived {
-                    Self::Zero => 0,
-                    Self::NonZero(_) => dived.to_num::<u8>(),
-                } + '0' as u8) as char,
-            );
+            dis_list.push((dived.to_num::<u8>() + '0' as u8) as char);
         }
         write!(f, "{}", String::from_iter(dis_list.into_iter().rev()))?;
         Ok(())
@@ -697,13 +642,10 @@ impl<T: Integer> BigNatural<T> {
 }
 impl<T: Integer> Display for BigNatural<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NonZero(n) => {
-                Self::fmt_impl(n, f)?;
-            }
-            Self::Zero => {
-                write!(f, "0")?;
-            }
+        if self.0.is_empty() {
+            write!(f, "0")?;
+        } else {
+            self.fmt_impl(f)?;
         }
         Ok(())
     }
@@ -728,7 +670,7 @@ impl<T: Integer> FromStr for BigNatural<T> {
         }
         if s.chars().nth(0).unwrap() == '0' {
             if s.len() == 1 {
-                return Ok(BigNatural::new());
+                return Ok(Self::default());
             }
             if s.len() < 3 {
                 return Err(BigNaturalParseErr::FormatWrong);
@@ -752,9 +694,9 @@ impl<T: Integer> FromStr for BigNatural<T> {
             }
             Ok(BigNaturalBase(input).into())
         } else {
-            let mut result = BigNatural::new();
-            let ten = BigNatural::from(10_u8);
-            let codes: Vec<BigNatural<T>> = (0..=9_u8).map(BigNatural::from).collect();
+            let mut result = Self::default();
+            let ten = Self::from(10_u8);
+            let codes: Vec<BigNatural<T>> = (0..=9_u8).map(Self::from).collect();
             for c in s.chars().filter(|&n| n != '_') {
                 if c.is_digit(10) {
                     result = codes[c as usize - '0' as usize].clone() + ten.clone() * result;
@@ -767,31 +709,18 @@ impl<T: Integer> FromStr for BigNatural<T> {
     }
 }
 /*
-pub enum BigInteger<T> {
-    NonZero(bool, Rc<Vec<T>>),
-    Zero,
-}
+#[derive(Clone)]
+pub struct  BigInteger<T> (bool, BigNatural<T>);
 impl<T> BigInteger<T> {
     pub fn new() -> Self {
-        BigInteger::Zero
-    }
-}
-impl<T> Clone for BigInteger<T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::NonZero(s, r) => Self::NonZero(*s, Rc::clone(r)),
-            Self::Zero => Self::Zero,
-        }
+        Self(false, BigNatural::Zero)
     }
 }
 macro_rules! impl_big_integer_from {
     (u, $t:ty) => {
         impl<T: Integer> From<$t> for BigInteger<T> {
             fn from(value: $t) -> Self {
-                match <BigNatural<T>>::from(value) {
-                    BigNatural::NonZero(value) => Self::NonZero(false, value),
-                    BigNatural::Zero => Self::Zero,
-                }
+                Self(false, <BigNatural<T>>::from(value))
             }
         }
     };
@@ -800,10 +729,7 @@ macro_rules! impl_big_integer_from {
             fn from(mut value: $t) -> Self {
                 let sign = value < 0;
                 value &= <$t>::NOTSIGN_COVER;
-                match <BigNatural<T>>::from(value) {
-                    BigNatural::NonZero(value) => Self::NonZero(sign, value),
-                    BigNatural::Zero => Self::Zero,
-                }
+                Self(sign, <BigNatural<T>>::from(value))
             }
         }
     };
@@ -827,29 +753,6 @@ impl<T: Ord> PartialOrd for BigInteger<T> {
 }
 impl<T: Ord> Ord for BigInteger<T> {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::NonZero(sign_a, a), Self::NonZero(sign_b, b)) => match (*sign_a, *sign_b) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                (true, _) => BigNatural::ord_impl(&b, &a),
-                (false, _) => BigNatural::ord_impl(&a, &b),
-            },
-            (Self::Zero, Self::NonZero(sign, _)) => {
-                if *sign {
-                    Ordering::Greater
-                } else {
-                    Ordering::Less
-                }
-            }
-            (Self::NonZero(sign, _), Self::Zero) => {
-                if *sign {
-                    Ordering::Less
-                } else {
-                    Ordering::Greater
-                }
-            }
-            _ => Ordering::Equal,
-        }
     }
 }
 impl<T: Ord> PartialEq for BigInteger<T> {
@@ -968,5 +871,6 @@ impl<T: Integer> Rem for BigInteger<T> {
     }
 }
 */
+
 #[cfg(test)]
 mod lib_tests;

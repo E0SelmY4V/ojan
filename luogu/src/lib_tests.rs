@@ -34,10 +34,7 @@ fn gcd() {
 }
 impl BigNatural<u8> {
     fn get_vec(&self) -> Vec<u8> {
-        match self {
-            Self::NonZero(n) => (*n.clone()).clone(),
-            Self::Zero => vec![],
-        }
+        self.0.to_vec()
     }
 }
 #[test]
@@ -169,6 +166,8 @@ fn big_natural() {
         };
     }
 
+    tcalc!(1821 + 0);
+    tcalc!(0 + 0);
     tcalc!(0x01 + 0x02);
     tcalc!(0x02 + 0x01);
     tcalc!(0xff + 0x01);
@@ -178,6 +177,7 @@ fn big_natural() {
     tcalc!(993828300 + 1);
 
     tcalc!(0 - 0);
+    tcalc!(193881991 - 0);
     tcalc!(0x10000000 - 1);
     tcalc!(0x100000000 - 1);
     tcalc!(267478328917 - 7283719283);
@@ -232,6 +232,8 @@ fn big_natural() {
     tcalc!(14 / 5);
     tcalc!(1882727373 / 1992838991929);
     tcalc!(29291993716637271_u128 / 998244353_u128);
+    tcalc!(0 / 998244353_u128);
+    tcalc!(0 / 99);
 
     tcalc!(818939492 % 1);
     tcalc!(29291993716637271 % 998244353);
@@ -241,6 +243,8 @@ fn big_natural() {
     tcalc!(1 % 1);
     tcalc!(2 % 2);
     tcalc!(0xff1828 % 0x18face);
+    tcalc!(0 / 998244353_u128);
+    tcalc!(0 / 99);
 
     macro_rules! tinput {
         ($u1:literal) => {
