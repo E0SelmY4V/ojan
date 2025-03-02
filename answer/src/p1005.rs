@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 fn power(n: u16, m: usize) -> u128 {
     (n as u128) << m

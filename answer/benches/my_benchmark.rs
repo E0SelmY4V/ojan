@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ojan_luogu::*;
+use ojan::*;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let a: BigNatural<u8> = "0x919939391982839494992992918188181839abbccbfbbffbaba"

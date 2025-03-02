@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 struct Day {
     pub hours: u8,

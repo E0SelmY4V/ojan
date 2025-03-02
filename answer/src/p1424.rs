@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 pub fn main() {
     let mut iner = input::new();

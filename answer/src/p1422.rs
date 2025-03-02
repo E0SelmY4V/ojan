@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 fn get_stage(sum: u16, stage_line: u16) -> (u16, u16) {
     if sum > stage_line {

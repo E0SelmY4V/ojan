@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 type Num = u32;
 struct Pack {

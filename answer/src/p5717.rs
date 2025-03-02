@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 use std::iter::Iterator;
 
 struct Triangle(u32, u32, u32);

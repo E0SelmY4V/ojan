@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 fn digitify(digit_char: char) -> u16 {
     match digit_char {

@@ -1,4 +1,4 @@
-use ojan_luogu::*;
+use ojan::*;
 
 pub fn bmi_tip(m: f64, h: f64) -> String {
     match m / (h * h) {
