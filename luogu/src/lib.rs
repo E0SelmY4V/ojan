@@ -15,8 +15,8 @@ use std::{
     mem::swap,
     num::ParseIntError,
     ops::{
-        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, Mul, MulAssign, Not, Rem,
-        Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
+        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, Mul, MulAssign, Neg, Not,
+        Rem, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
     },
     rc::Rc,
     str::FromStr,
@@ -626,26 +626,20 @@ impl<T: Integer> Rem for BigNatural<T> {
         Self::div_mod_pack::<'m'>(&self, &rhs).1
     }
 }
-impl<T: Integer> BigNatural<T> {
-    fn fmt_impl(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut dis_list = Vec::with_capacity(size_of::<T>() * self.0.len() * 3 / 10 + 1);
-        let ten = Self::from(10_u8);
-        let mut me = self.clone();
-        let mut dived;
-        while !me.0.is_empty() {
-            (me, dived) = me.div_mod(&ten);
-            dis_list.push((dived.to_num::<u8>() + '0' as u8) as char);
-        }
-        write!(f, "{}", String::from_iter(dis_list.into_iter().rev()))?;
-        Ok(())
-    }
-}
 impl<T: Integer> Display for BigNatural<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0.is_empty() {
             write!(f, "0")?;
         } else {
-            self.fmt_impl(f)?;
+            let mut dis_list = Vec::with_capacity(size_of::<T>() * self.0.len() * 3 / 10 + 1);
+            let ten = Self::from(10_u8);
+            let mut me = self.clone();
+            let mut dived;
+            while !me.0.is_empty() {
+                (me, dived) = me.div_mod(&ten);
+                dis_list.push((dived.to_num::<u8>() + '0' as u8) as char);
+            }
+            write!(f, "{}", String::from_iter(dis_list.into_iter().rev()))?;
         }
         Ok(())
     }
@@ -668,7 +662,7 @@ impl<T: Integer> FromStr for BigNatural<T> {
         if s.len() == 0 {
             return Err(BigNaturalParseErr::NoInput);
         }
-        if s.chars().nth(0).unwrap() == '0' {
+        if s.chars().nth(0).is_some_and(|n| n == '0') {
             if s.len() == 1 {
                 return Ok(Self::default());
             }
@@ -708,12 +702,15 @@ impl<T: Integer> FromStr for BigNatural<T> {
         }
     }
 }
-/*
-#[derive(Clone)]
-pub struct  BigInteger<T> (bool, BigNatural<T>);
+
+#[derive(Clone, Debug)]
+pub struct BigInteger<T>(bool, BigNatural<T>);
 impl<T> BigInteger<T> {
-    pub fn new() -> Self {
-        Self(false, BigNatural::Zero)
+    pub fn new(sign: bool, big_natural: BigNatural<T>) -> Self {
+        Self(sign, big_natural)
+    }
+    fn check_sign(&self) -> bool {
+        self.0 && !self.1 .0.is_empty()
     }
 }
 macro_rules! impl_big_integer_from {
@@ -728,7 +725,9 @@ macro_rules! impl_big_integer_from {
         impl<T: Integer> From<$t> for BigInteger<T> {
             fn from(mut value: $t) -> Self {
                 let sign = value < 0;
-                value &= <$t>::NOTSIGN_COVER;
+                if sign {
+                    value = -value;
+                }
                 Self(sign, <BigNatural<T>>::from(value))
             }
         }
@@ -753,6 +752,14 @@ impl<T: Ord> PartialOrd for BigInteger<T> {
 }
 impl<T: Ord> Ord for BigInteger<T> {
     fn cmp(&self, other: &Self) -> Ordering {
+        let sign_a = self.check_sign();
+        other.check_sign().cmp(&sign_a).then_with(|| {
+            if sign_a {
+                other.1.cmp(&self.1)
+            } else {
+                self.1.cmp(&other.1)
+            }
+        })
     }
 }
 impl<T: Ord> PartialEq for BigInteger<T> {
@@ -763,50 +770,33 @@ impl<T: Ord> PartialEq for BigInteger<T> {
 impl<T: Ord> Eq for BigInteger<T> {}
 impl<T: Integer> Display for BigInteger<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Self::NonZero(sign, n) = self {
-            if *sign {
-                write!(f, "-")?;
-            }
-            BigNatural::fmt_impl(n, f)?;
-        } else {
-            write!(f, "0")?;
+        if self.check_sign() {
+            write!(f, "-")?;
         }
+        Display::fmt(&self.1, f)?;
         Ok(())
     }
 }
 impl<T: Integer> Add for BigInteger<T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::NonZero(sign_a, mut a), Self::NonZero(sign_b, mut b)) => {
-                if sign_a ^ sign_b {
-                    let overflow = a < b;
-                    if overflow {
-                        swap(&mut a, &mut b);
-                    }
-                    match BigNatural::NonZero(a) - BigNatural::NonZero(b) {
-                        BigNatural::NonZero(r) => Self::NonZero(overflow ^ sign_a, r),
-                        BigNatural::Zero => Self::Zero,
-                    }
-                } else {
-                    match BigNatural::NonZero(a) + BigNatural::NonZero(b) {
-                        BigNatural::NonZero(r) => Self::NonZero(sign_a, r),
-                        BigNatural::Zero => panic!("Add wrong"),
-                    }
-                }
+        let Self(sign_a, mut a) = self;
+        let Self(sign_b, mut b) = rhs;
+        if sign_a ^ sign_b {
+            let overflow = a < b;
+            if overflow {
+                swap(&mut a, &mut b);
             }
-            (Self::Zero, n) => n,
-            (n, Self::Zero) => n,
+            Self(overflow ^ sign_a, a - b)
+        } else {
+            Self(sign_a, a + b)
         }
     }
 }
 impl<T> Neg for BigInteger<T> {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        match self {
-            Self::NonZero(sign, r) => Self::NonZero(!sign, r),
-            n => n,
-        }
+        Self(!self.0, self.1)
     }
 }
 impl<T: Integer> Sub for BigInteger<T> {
@@ -818,59 +808,42 @@ impl<T: Integer> Sub for BigInteger<T> {
 impl<T: Integer> Mul for BigInteger<T> {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::NonZero(sign_a, a), Self::NonZero(sign_b, b)) => {
-                match BigNatural::NonZero(a) * BigNatural::NonZero(b) {
-                    BigNatural::NonZero(r) => Self::NonZero(sign_a ^ sign_b, r),
-                    BigNatural::Zero => panic!("Mul wrong"),
-                }
-            }
-            _ => Self::Zero,
-        }
-    }
-}
-impl<T: Integer> BigInteger<T> {
-    fn div_pack<const M: char>(&self, rhs: &Self) -> (BigInteger<T>, BigInteger<T>) {
-        match (self, rhs) {
-            (Self::NonZero(sign_a, a), Self::NonZero(sign_b, b)) => {
-                let (dived, moded) = BigNatural::div_mod_impl::<M>(a, b);
-                (
-                    if M == 'm' {
-                        Self::Zero
-                    } else {
-                        match dived {
-                            BigNatural::NonZero(r) => Self::NonZero(!(*sign_a ^ *sign_b), r),
-                            BigNatural::Zero => Self::Zero,
-                        }
-                    },
-                    if M == 'd' {
-                        Self::Zero
-                    } else {
-                        match moded {
-                            BigNatural::NonZero(r) => Self::NonZero(*sign_a, r),
-                            BigNatural::Zero => Self::Zero,
-                        }
-                    },
-                )
-            }
-            (_, Self::Zero) => panic!("Div 0"),
-            (Self::Zero, _) => (Self::Zero, Self::Zero),
-        }
+        let Self(sign_a, a) = self;
+        let Self(sign_b, b) = rhs;
+        Self(sign_a ^ sign_b, a * b)
     }
 }
 impl<T: Integer> Div for BigInteger<T> {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
-        Self::div_pack::<'d'>(&self, &rhs).0
+        let Self(sign_a, a) = self;
+        let Self(sign_b, b) = rhs;
+        Self(sign_a ^ sign_b, a / b)
     }
 }
 impl<T: Integer> Rem for BigInteger<T> {
     type Output = Self;
     fn rem(self, rhs: Self) -> Self::Output {
-        Self::div_pack::<'d'>(&self, &rhs).1
+        let Self(sign_a, a) = self;
+        let Self(_, b) = rhs;
+        Self(sign_a, a % b)
     }
 }
-*/
+impl<T: Integer> BigInteger<T> {
+    pub fn div_mod(&self, rhs: &Self) -> (Self, Self) {
+        let Self(sign_a, a) = self;
+        let Self(sign_b, b) = rhs;
+        let (dived, moded) = a.div_mod(b);
+        (Self(*sign_a ^ *sign_b, dived), Self(*sign_a, moded))
+    }
+}
+impl<T: Integer> FromStr for BigInteger<T> {
+    type Err = BigNaturalParseErr;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let sign = s.chars().nth(0).is_some_and(|n| n == '-');
+        Ok(Self(sign, (if sign { &s[1..] } else { s }).parse()?))
+    }
+}
 
 #[cfg(test)]
 mod lib_tests;
