@@ -69,16 +69,16 @@ fn big_natural() {
     );
 
     macro_rules! tcmp {
-        ($a:literal  == $b:literal ) => {
+        ($a:literal == $b:literal) => {
             tcmp!($a, eq, $b);
         };
-        ($a:literal  < $b:literal ) => {
+        ($a:literal < $b:literal) => {
             tcmp!($a, le, $b);
         };
-        ($a:literal  > $b:literal ) => {
+        ($a:literal > $b:literal) => {
             tcmp!($a, ge, $b);
         };
-        ($a:literal != $b:literal ) => {
+        ($a:literal != $b:literal) => {
             tcmp!($a, ne, $b);
         };
         ($a:literal, $op:ident, $b:literal) => {
@@ -197,16 +197,30 @@ fn big_natural() {
     tcalc!(18239912 * 921823);
     tcalc!(92738287 * 1923);
 
+    tcalc!(1 >> 3);
+    tcalc!(1 >> 13);
+    tcalc!(0 >> 1);
+    tcalc!(0 >> 13);
+    tcalc!(256 >> 5);
+    tcalc!(256 >> 13);
     tcalc!(0x6199afbca993 >> 0);
     tcalc!(0x2817afbdbb >> 1);
     tcalc!(0x0194abbc71baba >> 2);
     tcalc!(0x828dbbaff191ccccccc >> 3);
+    tcalc!(0x828dbbaff191ccccccc >> 8);
     tcalc!(0x91837abcd8f1 >> 19);
 
+    tcalc!(1 << 3);
+    tcalc!(1 << 13);
+    tcalc!(0 << 1);
+    tcalc!(0 << 13);
+    tcalc!(256 << 5);
+    tcalc!(256 << 13);
     tcalc!(0x6199afbca993 << 0);
     tcalc!(0x2817afbdbb << 1);
     tcalc!(0x0194abbc71baba << 2);
     tcalc!(0x828dbbaff191ccccccc << 3);
+    tcalc!(0x828dbbaff191ccccccc << 8);
     tcalc!(0x91837abcd8f1 << 19);
 
     tcalc!(8764346792 / 1);
