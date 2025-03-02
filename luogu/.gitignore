@@ -1,4 +1,3 @@
 Cargo.lock
 target
 src/*.out
-*.swp
