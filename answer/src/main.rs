@@ -5,7 +5,7 @@ macro_rules! use_as_now {
     };
 }
 
-use_as_now!(p1055);
+use_as_now!(p1480);
 
 pub fn main() {
     now::main();

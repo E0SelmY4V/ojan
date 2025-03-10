@@ -11,11 +11,12 @@
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
-    iter::{repeat, repeat_n, RepeatN},
-    mem::swap,
+    iter::{repeat, Repeat, Take},
+    mem::{size_of, swap},
     num::ParseIntError,
     ops::{
-        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign
+        Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, DivAssign, Mul, MulAssign,
+        Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
     },
     rc::Rc,
     str::FromStr,
@@ -146,11 +147,11 @@ pub trait Gcdable {
     fn lcm(&self, other: Self) -> Self;
 }
 fn gcd_impl<T: Integer>(mut a: T, mut b: T) -> T {
-        while b != T::ZERO {
-            a %= b;
-            swap(&mut a, &mut b);
-        }
-        a
+    while b != T::ZERO {
+        a %= b;
+        swap(&mut a, &mut b);
+    }
+    a
 }
 
 impl<T: Integer> Gcdable for T {
@@ -179,8 +180,8 @@ impl<T: Copy> IterDeref for [T] {
     }
 }
 
-pub fn repeat_when<T: Clone>(value: T, expr: bool) -> RepeatN<T> {
-    repeat_n(value, if expr { 1 } else { 0 })
+pub fn repeat_when<T: Clone>(value: T, expr: bool) -> Take<Repeat<T>> {
+    repeat(value).take(if expr { 1 } else { 0 })
 }
 
 pub trait Integer:
@@ -324,11 +325,11 @@ impl<T: Integer> BigNatural<T> {
             vec.pop();
         }
     }
-    fn sub_impl(a: &mut Vec<T>, b: impl Iterator<Item = T>) -> bool {
-        a.iter_mut().for_each(|p| *p = !*p);
-        let success = !Self::add_impl(b, a.iter_mut(), false);
+    fn sub_impl(a: &mut Vec<T>, b: impl Iterator<Item = T>, na: usize) -> bool {
+        a.iter_mut().skip(na).for_each(|p| *p = !*p);
+        let success = !Self::add_impl(b, a.iter_mut().skip(na), false);
         Self::clear_value(a, T::MAX);
-        a.iter_mut().for_each(|p| *p = !*p);
+        a.iter_mut().skip(na).for_each(|p| *p = !*p);
         success
     }
     fn wrap_zero(mut result: Vec<T>) -> Self {
@@ -343,7 +344,7 @@ impl<T: Integer> BigNatural<T> {
             .map(|&a_num| {
                 let mut pre = T::ZERO;
                 b.iter_deref()
-                    .chain(repeat_n(T::ZERO, 1))
+                    .chain(repeat(T::ZERO).take(1))
                     .map(move |b_num| {
                         let mut a_low = a_num & T::HALF_COVER;
                         let a_high = a_num >> T::HALF_BIT_SIZE;
@@ -379,14 +380,20 @@ impl<T: Integer> BigNatural<T> {
             .collect();
         S::from_le_bytes_ref(&bytes)
     }
-    fn shr_in_size_iter<'a>(r: &'a [T], rhs: usize) -> impl Iterator<Item = T> + 'a {
+    fn shr_in_size_iter<'a>(
+        r: &'a [T],
+        rhs: usize,
+    ) -> impl Iterator<Item = T> + DoubleEndedIterator + 'a {
         let les = (T::BITS - rhs) as u32;
         let tail = r.last().copied().unwrap_or_default() >> rhs;
         r.windows(2)
             .map(move |s| s[1].checked_shl(les).unwrap_or_default() | (s[0] >> rhs))
             .chain(repeat_when(tail, tail != T::ZERO))
     }
-    fn shl_in_size_iter<'a>(r: &'a [T], rhs: usize) -> impl Iterator<Item = T> + 'a {
+    fn shl_in_size_iter<'a>(
+        r: &'a [T],
+        rhs: usize,
+    ) -> impl Iterator<Item = T> + DoubleEndedIterator + 'a {
         let les = (T::BITS - rhs) as u32;
         let tail = r
             .last()
@@ -399,17 +406,6 @@ impl<T: Integer> BigNatural<T> {
             )
             .chain(repeat_when(tail, tail != T::ZERO))
     }
-    fn div_impl_check(dis: usize, a: &mut Vec<T>, b: &[T], result: &mut [T]) -> bool {
-        let na = dis / T::BITS;
-        let m = dis % T::BITS;
-        let mut subed = Vec::from(&a[na..]);
-        let success = Self::sub_impl(&mut subed, Self::shl_in_size_iter(b, m));
-        if success {
-            a.splice(na.., subed);
-            result[na] |= T::ONE << m;
-        }
-        success
-    }
     fn div_impl(a: &mut Vec<T>, b: &[T]) -> Vec<T> {
         let dlen = a.len() - b.len() + 1;
         let bblen = b.len() * T::BITS - b.last().unwrap().leading_zeros() as usize;
@@ -418,13 +414,23 @@ impl<T: Integer> BigNatural<T> {
             .last()
             .and_then(|n| (a.len() * T::BITS - n.leading_zeros() as usize).checked_sub(bblen))
         {
-            if !Self::div_impl_check(dis, a, b, &mut result) {
-                if let Some(dis) = dis.checked_sub(1) {
-                    Self::div_impl_check(dis, a, b, &mut result);
-                } else {
+            let mut na = dis / T::BITS;
+            let mut m = dis % T::BITS;
+            if a.iter()
+                .skip(na)
+                .rev()
+                .map(|&n| n)
+                .cmp(Self::shl_in_size_iter(b, m).rev())
+                .is_lt()
+            {
+                if dis == 0 {
                     break;
                 }
+                na = (dis - 1) / T::BITS;
+                m = (dis - 1) % T::BITS;
             }
+            Self::sub_impl(a, Self::shl_in_size_iter(b, m), na);
+            result[na] |= T::ONE << m;
         }
         Self::pop_zero(&mut result);
         result
@@ -485,7 +491,7 @@ impl<T: Integer> From<Vec<T>> for BigNaturalBase {
 impl<T: Integer> From<BigNaturalBase> for BigNatural<T> {
     fn from(value: BigNaturalBase) -> Self {
         let BigNaturalBase(mut vec) = value;
-        vec.extend(repeat_n(0, T::SIZE - (vec.len() % T::SIZE)));
+        vec.extend(repeat(0).take(T::SIZE - (vec.len() % T::SIZE)));
         let result = vec
             .chunks(T::SIZE)
             .map(|n| T::from_le_bytes_ref(n))
@@ -525,7 +531,7 @@ impl<T: Integer> Sub for BigNatural<T> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         let mut a = self.0.to_vec();
-        let success = Self::sub_impl(&mut a, rhs.0.iter_deref());
+        let success = Self::sub_impl(&mut a, rhs.0.iter_deref(), 0);
         assert!(success, "Sub overflow");
         Self::wrap_zero(a)
     }
@@ -583,7 +589,8 @@ impl<T: Integer> Shl<usize> for BigNatural<T> {
             self
         } else {
             Self::new(
-                repeat_n(T::ZERO, rhs / T::BITS)
+                repeat(T::ZERO)
+                    .take(rhs / T::BITS)
                     .chain(Self::shl_in_size_iter(&self.0, rhs % T::BITS))
                     .collect(),
             )
