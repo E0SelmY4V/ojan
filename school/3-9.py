@@ -1,0 +1,1 @@
+print("\n".join(map(lambda i: " ".join(map(lambda j: f"{j}*{i}={i*j}", range(1, i + 1))), range(1, 10))))
