@@ -10,8 +10,13 @@ sayings = [
 ]
 persons = list(map(chr, range(ord("A"), ord("F"))))
 
-for possibilityStr in range(2**5):
-    possibilityList = list(enumerate(map(int, bin(possibilityStr)[2:].rjust(5, "0"))))
+for possibilityNum in range(2**5):
+    possibilityList = list(
+        map(
+            lambda personIndex: (personIndex, (possibilityNum // 2**personIndex) % 2),
+            range(0, 5),
+        )
+    )
     unableSets = list(map(lambda _: set(), range(5)))
     for personIndex, which in possibilityList:
         for unableIndex in filter(
