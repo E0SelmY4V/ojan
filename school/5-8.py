@@ -1,1 +1,1 @@
-print("".join(map(str, map(ord, filter(lambda n: n.isalpha(), input())))))
+print("".join([str(ord(i)) for i in input() if i.isalpha()]))
