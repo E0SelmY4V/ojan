@@ -1,0 +1,6 @@
+a = set(map(int, input().split(" ")))
+b = set(map(int, input().split(" ")))
+c = lambda n: print(" ".join(map(str, sorted(n))) + (" " if 89899 in a else ""))
+c(a & b)
+c(a | b)
+c(a - b)
