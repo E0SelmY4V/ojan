@@ -1,14 +1,8 @@
 print(
     "奇数和:%d\n偶数和:%d"
-    % (
-        (lambda f: lambda *a: f(f, *a))(
-            lambda s, n: (
-                lambda a: (
-                    n
-                    if a == -1
-                    else s(s, (n[0] + a, n[1]) if a % 2 else (n[0], n[1] + a))
-                )
-            )(int(input()))
-        )
-    )((0, 0))
+    % (lambda f: f(f, 0, 0))(
+        lambda s, j, o: (
+            lambda a: (j, o) if a < 0 else s(s, j + a * (a % 2), o + a * (1 - a % 2))
+        )(int(input()))
+    )
 )

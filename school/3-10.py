@@ -17,6 +17,6 @@ while True:
 	if i < n:
 		print("Too small!")
 		continue
-	print(f"{c - 1} times, you got it!")
+	print("%d times, you got it!" % c - 1)
 	break
 

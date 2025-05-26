@@ -1,5 +1,5 @@
 p = eval(input())
-s = (lambda f: lambda *a: f(f, *a))(
+s = (lambda f: f(f, p))(
     lambda s, k: (
         ("", "")
         if k == ""
@@ -7,5 +7,5 @@ s = (lambda f: lambda *a: f(f, *a))(
             s(s, k[1:])
         )
     )
-)(p)[1]
+)[1]
 print(sorted(filter(lambda n: n not in s, p)))

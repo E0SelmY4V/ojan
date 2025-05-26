@@ -1,6 +1,3 @@
-from functools import reduce
-from itertools import groupby
-
 c: dict[tuple[int, int], int] = {}
 d: dict[int, set[tuple[int, int]]] = {1: set()}
 m = 1
