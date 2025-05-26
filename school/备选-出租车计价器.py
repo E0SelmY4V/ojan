@@ -1,89 +1,37 @@
 from datetime import datetime, timedelta
 from itertools import chain, dropwhile, pairwise, accumulate, starmap
 from functools import reduce
+from operator import mul
 
-begin = 3
-begin_price = 13
-price = 2.3
-multiple = 1.2
-tax = 1
-
-(
-    lambda deal, calc: print(
-        "%.2lf"
-        % (
-            lambda money: (
-                sum(starmap(lambda a, b: a * b, zip([price, price * multiple], money)))
-                + begin_price
-                + tax
-                if sum(money) > begin
-                else begin_price
-            )
-        )(
-            (lambda f: f(f))(
-                lambda s, *r: (
-                    s(s, *r, deal(*filter(bool, input().split(" "))))
-                    if not len(r) or r[-1][1]
-                    else calc(r)
-                )
-            )
-        )
-    )
-)(
-    lambda t, v: (datetime(*[1] * 3, *map(int, t.split(":"))), int(v)),
-    (
-        lambda split_price, splited_day, roading, coll: (
-            lambda droping: lambda r: tuple(
-                reduce(
-                    coll,
-                    starmap(lambda n, s, q: (n, min(s, q)), droping(r)),
-                    (0, 0),
-                )
-            )
-        )(
-            lambda r: dropwhile(
-                lambda n: n[2] <= 0,
-                accumulate(
-                    starmap(roading, chain(*starmap(split_price, splited_day(r)))),
-                    lambda a, b: (b[0], b[1], a[2] + b[1]),
-                    initial=(True, 0, -begin),
-                ),
-            )
-        )
-    )(
-        (
-            lambda dawn, late: lambda tb, tn, v: (
-                [(dawn - tb, v, False), (late - dawn, v, True), (tn - late, v, False)]
-                if tb < dawn and late <= tn
-                else ([(tn - tb, v, False)] if tb < dawn and tn < dawn else [])
-                + (
-                    [(dawn - tb, v, False), (tn - dawn, v, True)]
-                    if tb < dawn and dawn <= tn
-                    else []
-                )
-                + ([(tn - tb, v, True)] if dawn <= tb and tn < late else [])
-                + (
-                    [(late - tb, v, True), (tn - late, v, False)]
-                    if tb < late and late <= tn
-                    else []
-                )
-                + ([(tn - tb, v, False)] if late <= tb and late <= tn else [])
-            )
-        )(*(datetime(*[1] * 3, i) for i in [5, 23])),
-        lambda r: chain(
-            *(
-                (
-                    [(tb, tn, v)]
-                    if tn > tb
-                    else [
-                        (tb, datetime(1, 1, 2), v),
-                        (datetime(1, 1, 2) - timedelta(1), tn, v),
-                    ]
-                )
-                for (tb, v), (tn, _) in pairwise(r)
-            )
-        ),
-        lambda t, v, n: (n, t.total_seconds() * v / 3600),
-        lambda r, n: ((r[0] + n[1], r[1]) if n[0] else (r[0], r[1] + n[1])),
+b, p, r, m, t = 3, 13, 2.3, 1.2, 1
+(lambda *f: lambda r, u, *s: print("%.2lf" % u((lambda f: f(f))(r(f, *s)))))(
+    lambda d, l: lambda b, n, v: (
+        [(d - b, v, False), (l - d, v, True), (n - l, v, False)]
+        if b < d and l <= n
+        else ([(n - b, v, False)] if b < d and n < d else [])
+        + ([(d - b, v, False), (n - d, v, True)] if b < d and d <= n else [])
+        + ([(n - b, v, True)] if d <= b and n < l else [])
+        + ([(l - b, v, True), (n - l, v, False)] if b < l and l <= n else [])
+        + ([(n - b, v, False)] if l <= b and l <= n else [])
     ),
+    (datetime(*[1] * 3, i) for i in (5, 23)),
+    lambda o, r, d: chain(*(o(tb, tn, v, *d) for (tb, v), (tn, _) in pairwise(r))),
+    lambda b, n, v, d, s: [(b, n, v)] if n > b else [(b, d, v), (d - s, n, v)],
+    lambda t, v, n: (n, t.total_seconds() * v / 3600),
+    (datetime(1, 1, 2), timedelta(1)),
+)(
+    lambda f, coll, droping, deal, calc: lambda s, *r: (
+        s(s, *r, deal(*filter(bool, input().split(" "))))
+        if not len(r) or r[-1][1]
+        else calc(coll, dropwhile(lambda n: n[2] <= 0, droping(*f, r)))
+    ),
+    lambda o: sum(starmap(mul, zip([r, r * m], o))) + p + t if sum(o) > b else p,
+    lambda r, n: ((r[0] + n[1], r[1]) if n[0] else (r[0], r[1] + n[1])),
+    lambda split_price, sp, splited_day, o, roading, d, r: accumulate(
+        starmap(roading, chain(*starmap(split_price(*sp), splited_day(o, r, d)))),
+        lambda a, b: (b[0], b[1], a[2] + b[1]),
+        initial=(True, 0, -b),
+    ),
+    lambda t, v: (datetime(*[1] * 3, *map(int, t.split(":"))), int(v)),
+    lambda c, d: tuple(reduce(c, starmap(lambda n, s, q: (n, min(s, q)), d), (0, 0))),
 )
