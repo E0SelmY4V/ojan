@@ -1,7 +1,7 @@
-import random
+from random import seed, randint
 
-random.seed(125)
-n = random.randint(0, 100)
+seed(125)
+n = randint(0, 100)
 c = 0
 
 while True:
